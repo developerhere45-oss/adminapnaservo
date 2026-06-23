@@ -32,7 +32,7 @@ In Render:
 - New `Web Service`
 - Runtime: `Node`
 - Root Directory: `apnaservo-admin` if deploying from the workspace/root repo, otherwise leave empty if this folder is its own repo
-- Build Command: `npm ci && npm run build`
+- Build Command: `npm ci --include=dev && npm run build`
 - Start Command: `npm start -- -H 0.0.0.0`
 - Health Check Path: `/dashboard`
 - Auto Deploy: enabled
