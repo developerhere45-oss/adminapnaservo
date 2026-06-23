@@ -1,168 +1,209 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
-  Activity,
-  BarChart3,
   Bell,
+  CalendarDays,
   CalendarCheck,
   ChevronDown,
-  ClipboardList,
+  CircleHelp,
+  FileText,
   Headphones,
-  ImageIcon,
-  LayoutDashboard,
+  Home,
   LogOut,
   Menu,
-  MessageSquareWarning,
-  Search,
+  RefreshCw,
   Settings,
   ShieldCheck,
-  UserRoundCog,
-  UsersRound,
-  Wrench,
+  Ticket,
+  UserCheck,
+  Users,
+  WalletCards,
+  X,
 } from "lucide-react";
+import { Providers } from "@/app/providers";
+import { LiveStatusPill, RealtimeBridge, useLiveAdmin } from "@/components/realtime-bridge";
 import { cn } from "@/lib/utils";
-import { Providers, useAdminUi } from "@/app/providers";
-import { LiveStatusPill, RealtimeBridge } from "./realtime-bridge";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/users", label: "Users", icon: Users },
+  { href: "/users/support", label: "Support & Complaints", icon: Ticket, child: true },
+  { href: "/partners", label: "Partners", icon: UserCheck },
+  { href: "/partner-approvals", label: "Partner Approvals", icon: ShieldCheck, badge: "8" },
+  { href: "/payments", label: "Payments & Finance", icon: WalletCards },
   { href: "/bookings", label: "Bookings", icon: CalendarCheck },
-  { href: "/partners", label: "Service Partners", icon: UserRoundCog },
-  { href: "/users", label: "Users", icon: UsersRound },
-  { href: "/services", label: "Services", icon: Wrench },
-  { href: "/quotes", label: "Quotes", icon: ClipboardList },
-  { href: "/complaints", label: "Complaints", icon: MessageSquareWarning },
-  { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/banners", label: "Banners", icon: ImageIcon },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/audit-logs", label: "Audit Logs", icon: Activity },
+  { href: "/reports", label: "Reports", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/logout", label: "Logout", icon: LogOut },
 ];
 
-function Logo() {
+function Logo({ onClick }: { onClick?: () => void }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-[#ff4f86] to-[#d40b54] text-white shadow-[0_14px_35px_rgba(249,43,116,.25)]">
-        <ShieldCheck size={25} strokeWidth={2.4} />
-      </div>
-      <div>
-        <div className="text-[26px] font-black italic tracking-[-0.05em] text-[#2a1420]">
-          Apna<span className="text-[#f32368]">Servo</span>
-        </div>
-        <p className="-mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8c7a82]">
-          Home Services At Your Doorstep
-        </p>
-      </div>
-    </div>
+    <Link href="/dashboard" onClick={onClick} className="flex h-[88px] items-center border-b border-[#edf0f6] px-7">
+      <img src="/apna-servo-wordmark.png" alt="ApnaServo" className="h-10 w-[156px] object-contain object-left" />
+    </Link>
   );
 }
 
-function Sidebar() {
+function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 z-30 hidden h-dvh w-[292px] border-r border-[#f4dce4] bg-white/78 px-5 py-6 backdrop-blur-2xl xl:block">
-      <Logo />
-      <nav className="mt-9 space-y-2">
+    <aside
+      className={cn(
+        "fixed left-0 top-0 h-dvh w-[232px] border-r border-[#edf0f6] bg-white",
+        mobile ? "z-50 xl:hidden" : "z-30 hidden xl:block",
+      )}
+    >
+      <Logo onClick={onNavigate} />
+      {mobile && (
+        <button
+          type="button"
+          onClick={onNavigate}
+          className="absolute right-3 top-6 grid h-9 w-9 place-items-center rounded-lg text-[#475467]"
+          aria-label="Close menu"
+        >
+          <X size={20} />
+        </button>
+      )}
+      <nav className="space-y-1 px-4 py-6">
         {navItems.map((item) => {
-          const active = pathname === item.href;
+          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
-                "group flex h-13 items-center gap-4 rounded-2xl px-4 text-[15px] font-semibold text-[#4b4248] transition-all hover:bg-[#fff0f4] hover:text-[#e91d63]",
-                active && "bg-[#fff0f4] text-[#e91d63] shadow-[0_12px_30px_rgba(249,43,116,.08)]",
+                "flex h-12 items-center gap-3 rounded-lg px-3 text-[14px] font-semibold text-[#263149] transition hover:bg-[#eef5ff] hover:text-[#0b6df6]",
+                item.child && "ml-5 h-10 text-[13px]",
+                active && "bg-[#eaf2ff] text-[#0b6df6]",
               )}
             >
-              <Icon size={19} className={cn("text-[#756a70]", active && "text-[#e91d63]")} />
-              {item.label}
+              <Icon size={18} />
+              <span className="min-w-0 flex-1">{item.label}</span>
+              {item.badge && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#0b6df6] px-1.5 text-[11px] font-black text-white">{item.badge}</span>}
             </Link>
           );
         })}
       </nav>
-      <div className="absolute bottom-6 left-5 right-5 rounded-3xl bg-gradient-to-br from-[#fff0f4] to-white p-5 shadow-[0_18px_45px_rgba(107,34,60,.09)]">
-        <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-[#f32368] shadow-sm">
-            <Headphones size={22} />
+      <div className="absolute bottom-6 left-4 right-4 rounded-xl border border-[#edf0f6] bg-white p-4">
+        <div className="flex gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-lg bg-[#eef5ff] text-[#0b6df6]">
+            <Headphones size={20} />
           </div>
           <div>
-            <p className="font-bold text-[#2a1420]">Need Help?</p>
-            <p className="text-xs text-[#8c7a82]">Contact support</p>
+            <p className="text-sm font-black text-[#111827]">Need Help?</p>
+            <p className="mt-1 text-xs text-[#667085]">Contact our support team</p>
           </div>
         </div>
+        <button className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#f5f9ff] text-sm font-bold text-[#0b6df6]">
+          <CircleHelp size={16} />
+          Contact Support
+        </button>
       </div>
     </aside>
   );
 }
 
-function Topbar() {
-  const router = useRouter();
-  const { toggleSidebar } = useAdminUi();
-
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  }
+function Topbar({ onMenu }: { onMenu: () => void }) {
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notifications = useLiveAdmin((state) => state.notifications);
+  const eventCount = useLiveAdmin((state) => state.eventCount);
+  const clearNotifications = useLiveAdmin((state) => state.clearNotifications);
 
   return (
-    <header className="sticky top-0 z-20 flex h-[92px] items-center justify-between border-b border-[#f4dce4] bg-white/78 px-4 backdrop-blur-2xl sm:px-8 xl:pl-10">
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          className="grid h-12 w-12 place-items-center rounded-2xl bg-[#fff0f4] text-[#f32368] xl:hidden"
-          aria-label="Open menu"
-        >
-          <Menu size={21} />
-        </button>
-        <div className="relative hidden w-[430px] max-w-[42vw] md:block">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8c7a82]" size={20} />
-          <input
-            className="h-13 w-full rounded-2xl border border-[#eed5dd] bg-white px-12 text-sm outline-none transition focus:border-[#f32368] focus:ring-4 focus:ring-[#ffd4e1]"
-            placeholder="Search for bookings, users, partners..."
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-20 flex h-[88px] items-center justify-between border-b border-[#edf0f6] bg-white/96 px-5 backdrop-blur xl:pl-7">
+      <button type="button" onClick={onMenu} className="grid h-10 w-10 place-items-center rounded-lg text-[#111827]" aria-label="Open menu">
+        <Menu size={23} />
+      </button>
+      <div className="flex items-center gap-5">
         <LiveStatusPill />
-        <button className="relative grid h-12 w-12 place-items-center rounded-2xl bg-white shadow-[0_12px_30px_rgba(107,34,60,.08)]" aria-label="Notifications">
-          <Bell size={21} />
-          <span className="absolute right-2 top-2 grid h-5 min-w-5 place-items-center rounded-full bg-[#f32368] px-1 text-[10px] font-bold text-white">
-            12
-          </span>
+        <button className="hidden h-12 items-center gap-3 rounded-lg border border-[#e6eaf2] bg-white px-4 text-sm font-semibold text-[#111827] md:flex">
+          Live operations
+          <CalendarDays size={17} />
         </button>
-        <button className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 shadow-[0_12px_30px_rgba(107,34,60,.08)]" onClick={logout}>
-          <div className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-[#ffd8e2] to-[#f32368] text-sm font-black text-white">
-            AU
-          </div>
-          <div className="hidden text-left md:block">
-            <p className="text-sm font-bold text-[#2a1420]">Admin User</p>
-            <p className="text-xs text-[#8c7a82]">Super Admin</p>
-          </div>
-          <ChevronDown size={16} className="hidden text-[#8c7a82] md:block" />
-          <LogOut size={17} className="text-[#f32368] md:hidden" />
+        <button className="grid h-10 w-10 place-items-center rounded-lg text-[#111827]" aria-label="Refresh">
+          <RefreshCw size={18} />
         </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setNotificationsOpen((open) => !open)}
+            className="relative grid h-10 w-10 place-items-center rounded-lg text-[#111827]"
+            aria-label="Notifications"
+          >
+            <Bell size={20} />
+            {eventCount > 0 && (
+              <span className="absolute right-0 top-0 grid h-5 min-w-5 place-items-center rounded-full bg-[#ff304f] px-1 text-[10px] font-black text-white">
+                {Math.min(eventCount, 99)}
+              </span>
+            )}
+          </button>
+          {notificationsOpen && (
+            <div className="absolute right-0 top-12 z-50 w-[340px] overflow-hidden rounded-xl border border-[#e6eaf2] bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-3">
+                <p className="text-sm font-black">Real-time Notifications</p>
+                <button type="button" onClick={clearNotifications} className="text-xs font-bold text-[#0b6df6]">Clear</button>
+              </div>
+              <div className="max-h-[360px] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm font-medium text-[#667085]">No new activity.</p>
+                ) : notifications.map((notification) => (
+                  <div key={notification.id} className="border-b border-[#edf0f6] px-4 py-3 last:border-0">
+                    <p className="text-sm font-bold text-[#111827]">{notification.title}</p>
+                    <p className="mt-1 text-xs text-[#667085]">{notification.detail}</p>
+                    <p className="mt-1 text-[11px] font-semibold text-[#98a2b3]">
+                      {new Intl.DateTimeFormat("en-IN", { timeStyle: "short" }).format(new Date(notification.receivedAt))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="grid h-11 w-11 place-items-center overflow-hidden rounded-full bg-[#eef5ff] text-sm font-black text-[#0b6df6]">AD</div>
+          <div className="hidden md:block">
+            <p className="text-sm font-black text-[#111827]">Admin</p>
+            <p className="text-xs font-medium text-[#667085]">Super Admin</p>
+          </div>
+          <ChevronDown size={16} className="text-[#667085]" />
+        </div>
       </div>
     </header>
   );
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <Providers>
       <RealtimeBridge />
-      <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,#fff0f4,transparent_34%),linear-gradient(180deg,#fffafa,#fff6f7)] text-[#181018]">
+      <div className="min-h-dvh bg-[#f8fafc] text-[#111827]">
         <Sidebar />
-        <div className="xl:pl-[292px]">
-          <Topbar />
-          <main className="px-4 py-7 sm:px-8 xl:px-10">{children}</main>
-          <footer className="flex flex-wrap justify-between gap-4 border-t border-[#f4dce4] px-8 py-6 text-xs text-[#8c7a82] xl:px-10">
-            <span>© 2026 ApnaServo. All rights reserved.</span>
-            <span>Terms & Conditions &nbsp; | &nbsp; Privacy Policy</span>
+        {mobileMenuOpen && (
+          <>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 z-40 bg-[#111827]/35 xl:hidden"
+              aria-label="Close menu"
+            />
+            <Sidebar mobile onNavigate={() => setMobileMenuOpen(false)} />
+          </>
+        )}
+        <div className="xl:pl-[232px]">
+          <Topbar onMenu={() => setMobileMenuOpen(true)} />
+          <main className="px-5 py-6 xl:px-7">{children}</main>
+          <footer className="flex justify-between px-7 pb-7 pt-2 text-xs text-[#667085]">
+            <span>(c) 2024 ApnaServo. All rights reserved.</span>
+            <span>Version 1.0.0</span>
           </footer>
         </div>
       </div>

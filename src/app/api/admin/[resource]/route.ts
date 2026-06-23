@@ -14,8 +14,8 @@ export async function GET(_request: Request, context: { params: Promise<{ resour
   }
 
   try {
-    const rows = await getResourceRows(resource);
-    return NextResponse.json({ resource, rows });
+    const data = await getResourceRows(resource);
+    return NextResponse.json(data);
   } catch {
     return NextResponse.json({ message: "Live backend unavailable" }, { status: 502 });
   }

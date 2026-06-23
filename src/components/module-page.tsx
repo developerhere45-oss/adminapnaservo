@@ -1,129 +1,339 @@
 "use client";
 
+import Link from "next/link";
+import {
+  AlertTriangle,
+  CalendarCheck,
+  CheckCircle2,
+  Clock3,
+  Download,
+  Eye,
+  Filter,
+  IndianRupee,
+  LogOut,
+  RefreshCw,
+  Search,
+  Settings,
+  Star,
+  Users,
+  WalletCards,
+  XCircle,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { Filter, Plus, Search, SlidersHorizontal } from "lucide-react";
-import { moduleRows } from "@/lib/mock-data";
 import { resourceConfig } from "@/lib/resource-config";
-import { cn, statusTone } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-type Row = Record<string, string | number | boolean | null | undefined>;
-const demoDataEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_DATA === "true";
+type ResourceRow = Record<string, unknown> & { id?: string };
+type ResourcePayload = {
+  resource: string;
+  rows: ResourceRow[];
+  metrics?: Record<string, unknown>;
+};
 
-async function fetchRows(resource: string): Promise<Row[]> {
-  const res = await fetch(`/api/admin/${resource}`);
-  if (!res.ok) return demoDataEnabled ? (moduleRows as Record<string, Row[]>)[resource] || [] : [];
-  const json = await res.json();
-  return json.rows || [];
+const metricIcons = [Users, CheckCircle2, Clock3, XCircle, CalendarCheck, IndianRupee, WalletCards, AlertTriangle, Star];
+const metricTones = [
+  "bg-[#eef5ff] text-[#0b6df6]",
+  "bg-[#e8f8ef] text-[#079455]",
+  "bg-[#fff4df] text-[#f59e0b]",
+  "bg-[#ffebef] text-[#d92d4b]",
+  "bg-[#f3eaff] text-[#8b5cf6]",
+  "bg-[#e6fffb] text-[#0e9384]",
+];
+
+async function fetchResource(resource: string): Promise<ResourcePayload> {
+  const response = await fetch(`/api/admin/${encodeURIComponent(resource)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Live backend unavailable");
+  return response.json();
 }
 
-function Badge({ value }: { value: string }) {
-  const tone = statusTone(value);
+function asText(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return String(value);
+  return String(value);
+}
+
+function titleFromKey(key: string) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .trim();
+}
+
+function formatDate(value: unknown) {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return asText(value);
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function formatNumber(value: unknown) {
+  const number = Number(value || 0);
+  return new Intl.NumberFormat("en-IN").format(number);
+}
+
+function formatMoney(value: unknown) {
+  return `Rs ${new Intl.NumberFormat("en-IN").format(Math.round(Number(value || 0)))}`;
+}
+
+function formatValue(key: string, value: unknown) {
+  const lower = key.toLowerCase();
+  if (lower.includes("date") || lower.endsWith("at") || lower.includes("time")) return formatDate(value);
+  if (lower.includes("amount") || lower.includes("revenue") || lower.includes("payment") || lower.includes("earning") || lower.includes("cost")) return formatMoney(value);
+  if (typeof value === "number") return formatNumber(value);
+  return asText(value);
+}
+
+function statusStyle(value: string) {
+  const clean = value.toLowerCase();
+  if (clean.includes("active") || clean.includes("paid") || clean.includes("verified") || clean.includes("completed") || clean.includes("resolved") || clean.includes("success")) return "bg-[#e8f8ef] text-[#079455]";
+  if (clean.includes("pending") || clean.includes("progress") || clean.includes("medium") || clean.includes("due") || clean.includes("created")) return "bg-[#fff4df] text-[#c26a00]";
+  if (clean.includes("blocked") || clean.includes("rejected") || clean.includes("open") || clean.includes("high") || clean.includes("cancel") || clean.includes("failed")) return "bg-[#ffebef] text-[#d92d4b]";
+  return "bg-[#eef2f6] text-[#475467]";
+}
+
+function Status({ value }: { value: string }) {
+  return <span className={cn("status-pill", statusStyle(value))}>{value || "-"}</span>;
+}
+
+function columnsFor(resource: string, rows: ResourceRow[]) {
+  const known: Record<string, string[]> = {
+    bookings: ["bookingCode", "userName", "userMobile", "serviceName", "partnerName", "bookingDateTime", "scheduledDateTime", "status", "finalServiceCost", "paymentStatus"],
+    partners: ["code", "name", "phone", "services", "city", "online", "totalBookings", "rating", "kyc", "trust", "status"],
+    "partner-approvals": ["code", "name", "phone", "services", "city", "kyc", "trust", "status", "joinedAt"],
+    payments: ["bookingCode", "userName", "partnerName", "amount", "currency", "status", "razorpayPaymentId", "createdAt"],
+    reports: ["reportType", "currentValue"],
+  };
+  if (known[resource]) return known[resource];
+  const first = rows[0] || {};
+  return Object.keys(first).filter((key) => key !== "id").slice(0, 10);
+}
+
+function PageHeader({ resource, isFetching, onRefresh, onExport }: { resource: string; isFetching: boolean; onRefresh: () => void; onExport: () => void }) {
+  const config = resourceConfig[resource] || resourceConfig.bookings;
   return (
-    <span
-      className={cn(
-        "inline-flex rounded-xl px-3 py-1 text-xs font-black",
-        tone === "success" && "bg-emerald-50 text-emerald-700",
-        tone === "danger" && "bg-rose-50 text-rose-700",
-        tone === "info" && "bg-sky-50 text-sky-700",
-        tone === "warning" && "bg-amber-50 text-amber-700",
-      )}
-    >
-      {value}
-    </span>
+    <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+      <div>
+        <h1 className="text-[28px] font-black text-[#111827]">{config.title}</h1>
+        <p className="mt-1 text-sm font-medium text-[#667085]">{config.subtitle} - live backend data only</p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <button onClick={onRefresh} className="flex h-11 items-center gap-2 rounded-lg border border-[#e6eaf2] bg-white px-4 text-sm font-bold">
+          <RefreshCw size={17} className={cn(isFetching && "animate-spin")} />
+          Refresh
+        </button>
+        <button onClick={onExport} className="flex h-11 items-center gap-2 rounded-lg border border-[#e6eaf2] bg-white px-4 text-sm font-bold">
+          <Download size={17} />
+          Export
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, index }: { label: string; value: unknown; index: number }) {
+  const Icon = metricIcons[index % metricIcons.length];
+  return (
+    <div className="admin-card p-5">
+      <div className="flex items-center gap-4">
+        <div className={cn("metric-icon", metricTones[index % metricTones.length])}><Icon size={25} /></div>
+        <div>
+          <p className="text-sm font-semibold text-[#475467]">{titleFromKey(label)}</p>
+          <p className="mt-1 text-2xl font-black">{formatValue(label, value)}</p>
+          <p className="mt-2 text-xs font-bold text-[#079455]">Live database</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataTable({
+  resource,
+  rows,
+  selectedId,
+  onSelect,
+}: {
+  resource: string;
+  rows: ResourceRow[];
+  selectedId: string;
+  onSelect: (row: ResourceRow) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const columns = columnsFor(resource, rows);
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) => Object.values(row).some((value) => asText(value).toLowerCase().includes(needle)));
+  }, [rows, search]);
+
+  return (
+    <div className="admin-card overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f6] px-5 py-4">
+        <h2 className="text-lg font-black">{resourceConfig[resource]?.title || "Records"} List</h2>
+        <div className="flex flex-wrap gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#667085]" size={17} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-[320px] rounded-lg border border-[#e6eaf2] bg-white px-10 text-sm outline-none" placeholder="Search live records..." />
+          </div>
+          <button className="flex h-11 items-center gap-2 rounded-lg border border-[#e6eaf2] px-4 text-sm font-bold"><Filter size={16} />Filter</button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="text-xs text-[#667085]">
+            <tr>
+              {columns.map((header) => <th key={header} className="px-5 py-4 font-bold">{titleFromKey(header)}</th>)}
+              <th className="px-5 py-4 font-bold">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={columns.length + 1} className="px-5 py-12 text-center text-sm font-semibold text-[#667085]">No live records found.</td></tr>
+            ) : filtered.map((row) => (
+              <tr key={row.id || JSON.stringify(row)} onClick={() => onSelect(row)} className={cn("cursor-pointer border-t border-[#edf0f6] hover:bg-[#f8fbff]", selectedId && row.id === selectedId && "bg-[#f5f9ff]")}>
+                {columns.map((column) => {
+                  const value = formatValue(column, row[column]);
+                  const statusLike = ["status", "paymentStatus", "kyc", "trust", "priority"].includes(column);
+                  return (
+                    <td key={column} className="whitespace-pre-line px-5 py-3 font-medium text-[#263149]">
+                      {statusLike ? <Status value={value} /> : value}
+                    </td>
+                  );
+                })}
+                <td className="px-5 py-3">
+                  {resource === "bookings" && row.id ? (
+                    <Link href={`/bookings/${encodeURIComponent(String(row.id))}`} className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => event.stopPropagation()}><Eye size={16} /></Link>
+                  ) : (
+                    <button className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => { event.stopPropagation(); onSelect(row); }}><Eye size={16} /></button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center justify-between border-t border-[#edf0f6] px-5 py-4 text-sm font-medium text-[#667085]">
+        <span>Showing {filtered.length} of {rows.length} live records</span>
+      </div>
+    </div>
+  );
+}
+
+function DetailPanel({ row }: { row: ResourceRow | null }) {
+  if (!row) {
+    return (
+      <div className="admin-card p-5">
+        <h2 className="text-lg font-black">Selected Record</h2>
+        <p className="mt-5 text-sm font-semibold text-[#667085]">Select a live row to inspect details.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-card p-5">
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className="text-lg font-black">Selected Record</h2>
+        {row.status ? <Status value={asText(row.status)} /> : null}
+      </div>
+      <div className="max-h-[620px] space-y-4 overflow-y-auto pr-1 text-sm">
+        {Object.entries(row).map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[130px_1fr] gap-4 border-b border-[#edf0f6] pb-3 last:border-0">
+            <span className="font-semibold text-[#667085]">{titleFromKey(label)}</span>
+            <span className="break-words font-bold text-[#111827]">{formatValue(label, value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function exportRows(resource: string, rows: ResourceRow[]) {
+  const columns = columnsFor(resource, rows);
+  const csv = [
+    columns.map(titleFromKey).join(","),
+    ...rows.map((row) => columns.map((column) => `"${asText(row[column]).replace(/"/g, '""')}"`).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${resource}-live-export.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function SettingsPage() {
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-[28px] font-black text-[#111827]">Settings</h1>
+        <p className="mt-1 text-sm font-medium text-[#667085]">No default settings are displayed until a live settings backend endpoint is connected.</p>
+      </div>
+      <div className="admin-card p-8">
+        <div className="flex items-center gap-3">
+          <Settings className="text-[#0b6df6]" size={24} />
+          <div>
+            <h2 className="text-lg font-black">Live Settings Required</h2>
+            <p className="mt-1 text-sm font-semibold text-[#667085]">This panel is intentionally empty instead of showing fake/default configuration values.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogoutPage() {
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-[28px] font-black text-[#111827]">Logout</h1>
+        <p className="mt-1 text-sm font-medium text-[#667085]">Dashboard &gt; Logout</p>
+      </div>
+      <div className="grid min-h-[620px] place-items-center">
+        <div className="admin-card w-full max-w-[560px] p-10 text-center">
+          <div className="mx-auto grid h-28 w-28 place-items-center rounded-full bg-[#eef5ff] text-[#0b6df6]"><LogOut size={54} /></div>
+          <h2 className="mt-7 text-3xl font-black">Ready to Logout?</h2>
+          <p className="mt-4 text-[#667085]">Password/login is disabled for this local build as requested.</p>
+          <Link href="/dashboard" className="mt-8 grid h-12 w-full place-items-center rounded-lg bg-[#0b6df6] text-sm font-black text-white">Back to Dashboard</Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
 export function ModulePage({ resource }: { resource: string }) {
-  const config = resourceConfig[resource] || resourceConfig.bookings;
-  const fallback = demoDataEnabled ? (moduleRows as Record<string, Row[]>)[resource] || [] : [];
-  const { data: rows = fallback } = useQuery({
+  const [selected, setSelected] = useState<ResourceRow | null>(null);
+  const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["admin-resource", resource],
-    queryFn: () => fetchRows(resource),
-    initialData: fallback,
+    queryFn: () => fetchResource(resource),
+    refetchInterval: 30_000,
+    enabled: resource !== "settings" && resource !== "logout",
   });
-  const columns = Object.keys(rows[0] || { id: "ID", status: "Status" });
+
+  if (resource === "settings") return <SettingsPage />;
+  if (resource === "logout") return <LogoutPage />;
+
+  const rows = data?.rows || [];
+  const selectedRow = selected && rows.some((row) => row.id === selected.id) ? selected : rows[0] || null;
+  const metrics = Object.entries(data?.metrics || {});
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-sm font-black uppercase tracking-[0.16em] text-[#f32368]">ApnaServo Admin</p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">{config.title}</h1>
-          <p className="mt-2 max-w-2xl text-[#756a70]">{config.subtitle}</p>
-        </div>
-        <button className="flex h-13 items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#f32368] to-[#ff477b] px-6 text-sm font-bold text-white shadow-[0_16px_35px_rgba(249,43,116,.24)]">
-          <Plus size={18} />
-          {config.action}
-        </button>
+    <div>
+      <PageHeader resource={resource} isFetching={isFetching} onRefresh={() => refetch()} onExport={() => exportRows(resource, rows)} />
+      {isError && <div className="admin-card mb-5 border-[#ffd3dc] bg-[#fff7f9] p-4 text-sm font-bold text-[#d92d4b]">Live backend unavailable. No default records are being shown.</div>}
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        {metrics.length === 0 ? (
+          <div className="admin-card p-5 text-sm font-semibold text-[#667085]">No live metrics returned.</div>
+        ) : metrics.map(([label, value], index) => <MetricCard key={label} label={label} value={value} index={index} />)}
       </section>
 
-      <section className="glass-card rounded-[28px] p-5">
-        <div className="flex flex-col gap-3 lg:flex-row">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8c7a82]" size={19} />
-            <input
-              className="h-13 w-full rounded-2xl border border-[#ecd3dc] bg-white px-12 text-sm outline-none transition focus:border-[#f32368] focus:ring-4 focus:ring-[#ffd4e1]"
-              placeholder={`Search ${config.title.toLowerCase()}...`}
-            />
-          </div>
-          <button className="flex h-13 items-center justify-center gap-2 rounded-2xl border border-[#ecd3dc] bg-white px-5 text-sm font-bold">
-            <Filter size={18} />
-            Filters
-          </button>
-          <button className="flex h-13 items-center justify-center gap-2 rounded-2xl border border-[#ecd3dc] bg-white px-5 text-sm font-bold">
-            <SlidersHorizontal size={18} />
-            Columns
-          </button>
-        </div>
+      <section className="mt-5 grid gap-5 2xl:grid-cols-[1fr_430px]">
+        <DataTable resource={resource} rows={rows} selectedId={asText(selectedRow?.id)} onSelect={setSelected} />
+        <DetailPanel row={selectedRow} />
       </section>
-
-      <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="glass-card overflow-hidden rounded-[28px]">
-        <div className="flex items-center justify-between border-b border-[#f4dce4] px-6 py-5">
-          <div>
-            <h2 className="text-lg font-black">Records</h2>
-            <p className="text-sm text-[#756a70]">{rows.length} records loaded through the admin API.</p>
-          </div>
-          <button className="rounded-2xl bg-[#fff0f4] px-4 py-2 text-sm font-black text-[#f32368]">Export CSV</button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-[#fff6f8] text-[#756a70]">
-              <tr>
-                {columns.map((column) => (
-                  <th key={column} className="px-6 py-4 font-black capitalize">{column.replace(/([A-Z])/g, " $1")}</th>
-                ))}
-                <th className="px-6 py-4 font-black">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={columns.length + 1} className="px-6 py-10 text-center font-bold text-[#756a70]">
-                    No live records available. Check backend connectivity and admin permissions.
-                  </td>
-                </tr>
-              )}
-              {rows.map((row, index) => (
-                <tr key={String(row.id || index)} className="border-b border-[#f4dce4] last:border-0">
-                  {columns.map((column) => {
-                    const value = row[column];
-                    const text = String(value ?? "-");
-                    return (
-                      <td key={column} className="px-6 py-4">
-                        {column.toLowerCase().includes("status") ? <Badge value={text} /> : <span className={column === "id" ? "font-black" : ""}>{text}</span>}
-                      </td>
-                    );
-                  })}
-                  <td className="px-6 py-4">
-                    <button className="rounded-xl border border-[#f5bed0] bg-white px-4 py-2 text-sm font-black text-[#f32368]">Manage</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.section>
     </div>
   );
 }

@@ -8,7 +8,7 @@ export const roleLabels: Record<AdminRole, string> = {
 
 export const permissions: Record<AdminRole, string[]> = {
   SUPER_ADMIN: ["*"],
-  OPERATIONS_MANAGER: ["bookings:manage", "technicians:manage", "services:read", "analytics:read"],
+  OPERATIONS_MANAGER: ["bookings:read", "bookings:manage", "technicians:manage", "users:read", "complaints:manage", "services:read", "analytics:read"],
   SUPPORT_EXECUTIVE: ["users:read", "complaints:manage", "bookings:read"],
 };
 

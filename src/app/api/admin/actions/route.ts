@@ -35,13 +35,6 @@ export async function POST(request: Request) {
     result = await fetchBackendJson(
       "/api/admin/actions",
       {
-        ok: true,
-        action: body.data.action,
-        targetId: body.data.targetId,
-        auditedBy: session.email,
-        backend: "fallback",
-      },
-      {
         method: "POST",
         body: JSON.stringify(body.data),
       },

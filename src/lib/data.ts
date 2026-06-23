@@ -1,15 +1,10 @@
-import { dashboardData, moduleRows } from "./mock-data";
 import { fetchBackendJson } from "./backend";
 export { resourceConfig } from "./resource-config";
 
 export async function getOverview() {
-  return fetchBackendJson("/api/admin/dashboard", dashboardData);
+  return fetchBackendJson("/api/admin/dashboard");
 }
 
-export type ResourceKey = keyof typeof moduleRows;
-
 export async function getResourceRows(resource: string) {
-  const fallback = moduleRows[resource as ResourceKey] || [];
-  const response = await fetchBackendJson<{ rows?: typeof fallback }>(`/api/admin/${resource}`, { rows: fallback });
-  return response.rows || fallback;
+  return fetchBackendJson<{ resource: string; rows: Record<string, unknown>[]; metrics?: Record<string, unknown> }>(`/api/admin/${resource}`);
 }

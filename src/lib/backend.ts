@@ -34,32 +34,23 @@ export function createAdminRealtimeToken(ttlMs = 5 * 60 * 1000) {
   return `${expiresAt}.${signature}`;
 }
 
-export async function fetchBackendJson<T>(path: string, fallback: T, init?: RequestInit): Promise<T> {
+export async function fetchBackendJson<T>(path: string, init?: RequestInit): Promise<T> {
   assertProductionBackendConfig();
-  try {
-    const url = `${backendUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
-    const response = await fetch(url, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Secret": adminBackendSecret,
-        ...(init?.headers || {}),
-      },
-      cache: "no-store",
-    });
+  const url = `${backendUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Admin-Secret": adminBackendSecret,
+      ...(init?.headers || {}),
+    },
+    cache: "no-store",
+  });
 
-    if (!response.ok) {
-      if (isProduction()) {
-        throw new Error(`Backend ${response.status}`);
-      }
-      return fallback;
-    }
-
-    return (await response.json()) as T;
-  } catch (error) {
-    if (isProduction()) {
-      throw error;
-    }
-    return fallback;
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(`Backend ${response.status}${message ? `: ${message.slice(0, 240)}` : ""}`);
   }
+
+  return (await response.json()) as T;
 }

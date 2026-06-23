@@ -29,12 +29,16 @@
     }
   },
   "include": [
-    "next-env.d.ts",
+    "**/*.mts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
+    ".next-check/types/**/*.ts",
+    ".next-redesign-dev/types/**/*.ts",
+    ".next-verify/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    ".next-final/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
