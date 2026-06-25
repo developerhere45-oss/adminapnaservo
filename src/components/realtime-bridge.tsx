@@ -70,6 +70,10 @@ function eventLabel(eventName: string) {
     "support:ticket_updated": "Support ticket updated",
     "partner:registered": "New partner registered",
     "partner:updated": "Partner profile updated",
+    "notification:created": "Notification created",
+    "notification:scheduled": "Notification scheduled",
+    "notification:sent": "Notification sent",
+    "notification:deleted": "Notification deleted",
   };
   return labels[eventName] || eventName;
 }
@@ -78,6 +82,7 @@ function eventDetail(eventName: string, payload: Record<string, unknown>) {
   if (eventName.startsWith("booking:")) return String(payload.bookingCode || payload.bookingId || "Booking event received");
   if (eventName.startsWith("payment:")) return String(payload.bookingCode || payload.paymentId || payload.status || "Payment event received");
   if (eventName.startsWith("support:")) return String(payload.ticketId || payload.status || "Support ticket event received");
+  if (eventName.startsWith("notification:")) return String(payload.title || payload.notificationId || payload.status || "Notification event received");
   if (eventName.startsWith("complaint:")) return String(payload.bookingCode || payload.reason || "Complaint event received");
   if (eventName.startsWith("user:")) return String(payload.name || payload.phone || payload.userId || "User event received");
   return "Live backend event received";
@@ -110,6 +115,10 @@ const adminEvents = [
   "support:ticket_updated",
   "partner:registered",
   "partner:updated",
+  "notification:created",
+  "notification:scheduled",
+  "notification:sent",
+  "notification:deleted",
   "partner:online",
   "partner:offline",
   "partner:location_update",

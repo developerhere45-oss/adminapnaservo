@@ -35,6 +35,12 @@ export const resourceConfig: Record<string, { title: string; subtitle: string; p
     permission: "complaints:manage",
     action: "Export",
   },
+  notifications: {
+    title: "Notifications",
+    subtitle: "Dashboard > Notifications",
+    permission: "bookings:manage",
+    action: "Send Notification",
+  },
   reports: {
     title: "Reports",
     subtitle: "Dashboard > Reports",
