@@ -20,7 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { resourceConfig } from "@/lib/resource-config";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,19 @@ const metricTones = [
 async function fetchResource(resource: string): Promise<ResourcePayload> {
   const response = await fetch(`/api/admin/${encodeURIComponent(resource)}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Live backend unavailable");
+  return response.json();
+}
+
+async function runAdminAction(action: string, targetId: string) {
+  const response = await fetch("/api/admin/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, targetId }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(typeof payload.message === "string" ? payload.message : "Action failed");
+  }
   return response.json();
 }
 
@@ -89,8 +102,8 @@ function formatValue(key: string, value: unknown) {
 function statusStyle(value: string) {
   const clean = value.toLowerCase();
   if (clean.includes("active") || clean.includes("paid") || clean.includes("verified") || clean.includes("completed") || clean.includes("resolved") || clean.includes("success")) return "bg-[#e8f8ef] text-[#079455]";
-  if (clean.includes("pending") || clean.includes("progress") || clean.includes("medium") || clean.includes("due") || clean.includes("created")) return "bg-[#fff4df] text-[#c26a00]";
-  if (clean.includes("blocked") || clean.includes("rejected") || clean.includes("open") || clean.includes("high") || clean.includes("cancel") || clean.includes("failed")) return "bg-[#ffebef] text-[#d92d4b]";
+  if (clean.includes("pending") || clean.includes("waiting") || clean.includes("progress") || clean.includes("medium") || clean.includes("due") || clean.includes("created")) return "bg-[#fff4df] text-[#c26a00]";
+  if (clean.includes("blocked") || clean.includes("denied") || clean.includes("rejected") || clean.includes("open") || clean.includes("high") || clean.includes("cancel") || clean.includes("failed")) return "bg-[#ffebef] text-[#d92d4b]";
   return "bg-[#eef2f6] text-[#475467]";
 }
 
@@ -102,7 +115,7 @@ function columnsFor(resource: string, rows: ResourceRow[]) {
   const known: Record<string, string[]> = {
     bookings: ["bookingCode", "userName", "userMobile", "serviceName", "partnerName", "bookingDateTime", "scheduledDateTime", "status", "finalServiceCost", "paymentStatus"],
     partners: ["code", "name", "phone", "services", "city", "online", "totalBookings", "rating", "kyc", "trust", "status"],
-    "partner-approvals": ["code", "name", "phone", "services", "city", "kyc", "trust", "status", "joinedAt"],
+    "partner-approvals": ["code", "name", "phone", "services", "city", "approval", "kyc", "trust", "joinedAt"],
     payments: ["bookingCode", "userName", "partnerName", "amount", "currency", "status", "razorpayPaymentId", "createdAt"],
     reports: ["reportType", "currentValue"],
   };
@@ -154,11 +167,15 @@ function DataTable({
   rows,
   selectedId,
   onSelect,
+  onAdminAction,
+  pendingAction,
 }: {
   resource: string;
   rows: ResourceRow[];
   selectedId: string;
   onSelect: (row: ResourceRow) => void;
+  onAdminAction: (action: string, targetId: string) => void;
+  pendingAction?: string;
 }) {
   const [search, setSearch] = useState("");
   const columns = columnsFor(resource, rows);
@@ -195,7 +212,7 @@ function DataTable({
               <tr key={row.id || JSON.stringify(row)} onClick={() => onSelect(row)} className={cn("cursor-pointer border-t border-[#edf0f6] hover:bg-[#f8fbff]", selectedId && row.id === selectedId && "bg-[#f5f9ff]")}>
                 {columns.map((column) => {
                   const value = formatValue(column, row[column]);
-                  const statusLike = ["status", "paymentStatus", "kyc", "trust", "priority"].includes(column);
+                  const statusLike = ["status", "paymentStatus", "kyc", "trust", "priority", "approval"].includes(column);
                   return (
                     <td key={column} className="whitespace-pre-line px-5 py-3 font-medium text-[#263149]">
                       {statusLike ? <Status value={value} /> : value}
@@ -203,7 +220,26 @@ function DataTable({
                   );
                 })}
                 <td className="px-5 py-3">
-                  {resource === "bookings" && row.id ? (
+                  {resource === "partner-approvals" && row.id ? (
+                    <div className="flex min-w-[180px] gap-2" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        disabled={pendingAction === `${row.id}:approve-technician`}
+                        className="flex h-9 items-center gap-1 rounded-lg bg-[#079455] px-3 text-xs font-black text-white disabled:opacity-60"
+                        onClick={() => onAdminAction("approve-technician", String(row.id))}
+                      >
+                        <CheckCircle2 size={14} />
+                        Approve
+                      </button>
+                      <button
+                        disabled={pendingAction === `${row.id}:reject-technician`}
+                        className="flex h-9 items-center gap-1 rounded-lg border border-[#ffd3dc] bg-white px-3 text-xs font-black text-[#d92d4b] disabled:opacity-60"
+                        onClick={() => onAdminAction("reject-technician", String(row.id))}
+                      >
+                        <XCircle size={14} />
+                        Deny
+                      </button>
+                    </div>
+                  ) : resource === "bookings" && row.id ? (
                     <Link href={`/bookings/${encodeURIComponent(String(row.id))}`} className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => event.stopPropagation()}><Eye size={16} /></Link>
                   ) : (
                     <button className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => { event.stopPropagation(); onSelect(row); }}><Eye size={16} /></button>
@@ -305,11 +341,30 @@ function LogoutPage() {
 
 export function ModulePage({ resource }: { resource: string }) {
   const [selected, setSelected] = useState<ResourceRow | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
+  const queryClient = useQueryClient();
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["admin-resource", resource],
     queryFn: () => fetchResource(resource),
     refetchInterval: 30_000,
     enabled: resource !== "settings" && resource !== "logout",
+  });
+  const actionMutation = useMutation({
+    mutationFn: ({ action, targetId }: { action: string; targetId: string }) => runAdminAction(action, targetId),
+    onMutate: ({ action, targetId }) => {
+      setPendingAction(`${targetId}:${action}`);
+      setActionMessage("");
+    },
+    onSuccess: async (_result, variables) => {
+      setActionMessage(variables.action === "approve-technician" ? "Partner approved and notified." : "Partner denied and notified.");
+      setSelected(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin-resource", resource] });
+    },
+    onError: (error) => {
+      setActionMessage(error instanceof Error ? error.message : "Action failed");
+    },
+    onSettled: () => setPendingAction(""),
   });
 
   if (resource === "settings") return <SettingsPage />;
@@ -323,6 +378,11 @@ export function ModulePage({ resource }: { resource: string }) {
     <div>
       <PageHeader resource={resource} isFetching={isFetching} onRefresh={() => refetch()} onExport={() => exportRows(resource, rows)} />
       {isError && <div className="admin-card mb-5 border-[#ffd3dc] bg-[#fff7f9] p-4 text-sm font-bold text-[#d92d4b]">Live backend unavailable. No default records are being shown.</div>}
+      {actionMessage && (
+        <div className={cn("admin-card mb-5 p-4 text-sm font-bold", actionMessage.includes("failed") || actionMessage.includes("unavailable") ? "border-[#ffd3dc] bg-[#fff7f9] text-[#d92d4b]" : "border-[#c7f0d8] bg-[#f3fff7] text-[#079455]")}>
+          {actionMessage}
+        </div>
+      )}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {metrics.length === 0 ? (
@@ -331,7 +391,14 @@ export function ModulePage({ resource }: { resource: string }) {
       </section>
 
       <section className="mt-5 grid gap-5 2xl:grid-cols-[1fr_430px]">
-        <DataTable resource={resource} rows={rows} selectedId={asText(selectedRow?.id)} onSelect={setSelected} />
+        <DataTable
+          resource={resource}
+          rows={rows}
+          selectedId={asText(selectedRow?.id)}
+          onSelect={setSelected}
+          onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+          pendingAction={pendingAction}
+        />
         <DetailPanel row={selectedRow} />
       </section>
     </div>
