@@ -193,7 +193,22 @@ export function NotificationsPage() {
     let cancelled = false;
     async function loadCount() {
       if (specificTarget) {
-        setRecipientCount(selectedRecipient ? 1 : 0);
+        if (selectedRecipient) {
+          setRecipientCount(1);
+          return;
+        }
+        if (recipientQuery.trim().length < 2) {
+          setRecipientCount(0);
+          return;
+        }
+        try {
+          const result = await jsonFetch<{ count: number; results: Recipient[] }>(
+            `/api/admin/notifications/search-recipients?targetType=${targetType}&q=${encodeURIComponent(recipientQuery.trim())}`
+          );
+          if (!cancelled) setRecipientCount(result.results?.length || result.count || 0);
+        } catch {
+          if (!cancelled) setRecipientCount(null);
+        }
         return;
       }
       try {
@@ -205,7 +220,7 @@ export function NotificationsPage() {
     }
     loadCount();
     return () => { cancelled = true; };
-  }, [specificTarget, selectedRecipient, targetType]);
+  }, [recipientQuery, specificTarget, selectedRecipient, targetType]);
 
   useEffect(() => {
     if (!specificTarget || recipientQuery.trim().length < 2) {
@@ -228,6 +243,7 @@ export function NotificationsPage() {
   const payload = useMemo(() => ({
     targetType,
     recipientId: selectedRecipient?.id || "",
+    recipientQuery: recipientQuery.trim(),
     title: title.trim(),
     message: message.trim(),
     imageUrl: imageUrl.trim(),
@@ -235,7 +251,7 @@ export function NotificationsPage() {
     actionId: actionNeedsId ? actionId.trim() : "",
     ...(scheduleMode === "later" && scheduleAt ? { scheduleAt: new Date(scheduleAt).toISOString() } : {}),
     idempotencyKey: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-  }), [actionId, actionNeedsId, actionType, imageUrl, message, scheduleAt, scheduleMode, selectedRecipient?.id, targetType, title]);
+  }), [actionId, actionNeedsId, actionType, imageUrl, message, recipientQuery, scheduleAt, scheduleMode, selectedRecipient?.id, targetType, title]);
 
   const sendMutation = useMutation({
     mutationFn: () => jsonFetch<{ notification: NotificationRecord }>(
@@ -262,7 +278,7 @@ export function NotificationsPage() {
     setFormError("");
     if (!title.trim() || title.length > 100) return setFormError("Title is required and must be 100 characters or less.");
     if (!message.trim() || message.length > 500) return setFormError("Message is required and must be 500 characters or less.");
-    if (specificTarget && !selectedRecipient) return setFormError("Select a specific recipient first.");
+    if (specificTarget && !selectedRecipient && recipientQuery.trim().length < 2) return setFormError("Enter mobile number, name, email, or select a specific recipient first.");
     if (actionNeedsId && !actionId.trim()) return setFormError("Service/booking action requires an ID.");
     if (scheduleMode === "later" && !scheduleAt) return setFormError("Select schedule date and time.");
     setConfirmOpen(true);

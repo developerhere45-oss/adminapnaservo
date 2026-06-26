@@ -34,8 +34,12 @@ type PartnerDocument = {
   id: string;
   documentType: string;
   originalName: string;
+  mimeType: string;
+  sizeBytes: number;
   url: string;
+  storageProvider: string;
   validationStatus: string;
+  validationReasons: string[];
   uploadedAt: string;
 };
 type PartnerProfilePayload = {
@@ -313,6 +317,7 @@ function PartnerDetailPanel({
   });
 
   const partner = data?.partner || row;
+  const profilePhoto = asText(partner.profilePhoto);
   const fields = [
     "fullName", "mobileNumber", "email", "dateOfBirth", "gender", "completeResidentialAddress",
     "city", "state", "pinCode", "emergencyContactNumber", "professionServiceCategory",
@@ -355,6 +360,18 @@ function PartnerDetailPanel({
       <div className="max-h-[720px] space-y-5 overflow-y-auto pr-1">
         <section>
           <h3 className="mb-3 text-sm font-black">Complete Profile</h3>
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-[#edf0f6] bg-[#f8fbff] p-3">
+            {profilePhoto !== "-" ? (
+              <img src={profilePhoto} alt="Partner profile" className="h-16 w-16 rounded-full border border-[#dbeafe] object-cover" />
+            ) : (
+              <div className="grid h-16 w-16 place-items-center rounded-full bg-[#eef5ff] text-sm font-black text-[#0b6df6]">AS</div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-black text-[#111827]">Profile Photo</p>
+              <p className="mt-1 break-all text-xs font-semibold text-[#667085]">{profilePhoto !== "-" ? "Uploaded and available for review" : "No uploaded profile photo found"}</p>
+              {profilePhoto !== "-" && <a href={profilePhoto} target="_blank" className="mt-2 inline-flex text-xs font-black text-[#0b6df6]">Open profile photo</a>}
+            </div>
+          </div>
           <div className="space-y-3 text-sm">
             {fields.map((field) => (
               <div key={field} className="grid grid-cols-[145px_1fr] gap-3 border-b border-[#edf0f6] pb-2 last:border-0">
@@ -376,15 +393,25 @@ function PartnerDetailPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-black text-[#111827]">{titleFromKey(document.documentType)}</p>
-                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(document.uploadedAt)}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(document.uploadedAt)} | {document.storageProvider || "storage"} | {document.sizeBytes ? `${Math.round(document.sizeBytes / 1024)} KB` : "size unknown"}</p>
                     </div>
                     <Status value={document.validationStatus} />
                   </div>
+                  {document.url && (document.mimeType?.startsWith("image/") || document.url.startsWith("data:image/")) ? (
+                    <a href={document.url} target="_blank" className="mt-3 block overflow-hidden rounded-lg border border-[#edf0f6] bg-[#f8fbff]">
+                      <img src={document.url} alt={titleFromKey(document.documentType)} className="h-36 w-full object-cover" />
+                    </a>
+                  ) : null}
                   {document.url ? (
                     <a href={document.url} target="_blank" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-[#e6eaf2] px-3 text-xs font-black text-[#0b6df6]">
                       <Eye size={14} />
                       Open File
                     </a>
+                  ) : (
+                    <p className="mt-3 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">File URL missing. Ask partner to re-upload this document.</p>
+                  )}
+                  {document.validationReasons?.length ? (
+                    <p className="mt-2 text-xs font-semibold text-[#667085]">Checks: {document.validationReasons.join(", ")}</p>
                   ) : null}
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button className="h-9 rounded-lg bg-[#079455] text-xs font-black text-white" onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })}>Verify</button>
