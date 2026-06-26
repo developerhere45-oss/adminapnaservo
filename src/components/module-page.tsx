@@ -30,6 +30,20 @@ type ResourcePayload = {
   rows: ResourceRow[];
   metrics?: Record<string, unknown>;
 };
+type PartnerDocument = {
+  id: string;
+  documentType: string;
+  originalName: string;
+  url: string;
+  validationStatus: string;
+  uploadedAt: string;
+};
+type PartnerProfilePayload = {
+  partner: Record<string, unknown>;
+  documents: PartnerDocument[];
+  supportTickets: ResourceRow[];
+  bookingHistory: ResourceRow[];
+};
 
 const metricIcons = [Users, CheckCircle2, Clock3, XCircle, CalendarCheck, IndianRupee, WalletCards, AlertTriangle, Star];
 const metricTones = [
@@ -57,6 +71,22 @@ async function runAdminAction(action: string, targetId: string) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(typeof payload.message === "string" ? payload.message : "Action failed");
   }
+  return response.json();
+}
+
+async function fetchPartnerProfile(partnerId: string): Promise<PartnerProfilePayload> {
+  const response = await fetch(`/api/admin/partners/${encodeURIComponent(partnerId)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Partner profile unavailable");
+  return response.json();
+}
+
+async function updatePartnerDocument(partnerId: string, documentId: string, validationStatus: "accepted" | "rejected" | "review") {
+  const response = await fetch(`/api/admin/partners/${encodeURIComponent(partnerId)}/documents/${encodeURIComponent(documentId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ validationStatus }),
+  });
+  if (!response.ok) throw new Error("Document update failed");
   return response.json();
 }
 
@@ -257,7 +287,146 @@ function DataTable({
   );
 }
 
-function DetailPanel({ row }: { row: ResourceRow | null }) {
+function PartnerDetailPanel({
+  row,
+  onAdminAction,
+  pendingAction,
+}: {
+  row: ResourceRow;
+  onAdminAction: (action: string, targetId: string) => void;
+  pendingAction?: string;
+}) {
+  const partnerId = String(row.id || "");
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["admin-partner-profile", partnerId],
+    queryFn: () => fetchPartnerProfile(partnerId),
+    enabled: Boolean(partnerId),
+    refetchInterval: 30_000,
+  });
+  const documentMutation = useMutation({
+    mutationFn: ({ documentId, validationStatus }: { documentId: string; validationStatus: "accepted" | "rejected" | "review" }) =>
+      updatePartnerDocument(partnerId, documentId, validationStatus),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
+    },
+  });
+
+  const partner = data?.partner || row;
+  const fields = [
+    "fullName", "mobileNumber", "email", "dateOfBirth", "gender", "completeResidentialAddress",
+    "city", "state", "pinCode", "emergencyContactNumber", "professionServiceCategory",
+    "yearsOfExperience", "workingAreas", "serviceArea", "languagesKnown", "registrationDate",
+    "currentVerificationStatus", "kycStatus", "trustStatus", "accountStatus",
+  ];
+
+  return (
+    <div className="admin-card p-5">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-black">Partner Verification</h2>
+          <p className="mt-1 text-xs font-bold text-[#667085]">{asText(partner.partnerCode || row.code)}</p>
+        </div>
+        {partner.currentVerificationStatus ? <Status value={asText(partner.currentVerificationStatus)} /> : null}
+      </div>
+
+      {isError && <div className="mb-4 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">Full live profile unavailable.</div>}
+      {isLoading && <div className="mb-4 rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">Loading complete profile...</div>}
+
+      <div className="mb-5 grid grid-cols-2 gap-2">
+        <button
+          disabled={pendingAction === `${partnerId}:approve-technician`}
+          className="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#079455] text-xs font-black text-white disabled:opacity-60"
+          onClick={() => onAdminAction("approve-technician", partnerId)}
+        >
+          <CheckCircle2 size={15} />
+          Approve
+        </button>
+        <button
+          disabled={pendingAction === `${partnerId}:reject-technician`}
+          className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ffd3dc] bg-white text-xs font-black text-[#d92d4b] disabled:opacity-60"
+          onClick={() => onAdminAction("reject-technician", partnerId)}
+        >
+          <XCircle size={15} />
+          Reject
+        </button>
+      </div>
+
+      <div className="max-h-[720px] space-y-5 overflow-y-auto pr-1">
+        <section>
+          <h3 className="mb-3 text-sm font-black">Complete Profile</h3>
+          <div className="space-y-3 text-sm">
+            {fields.map((field) => (
+              <div key={field} className="grid grid-cols-[145px_1fr] gap-3 border-b border-[#edf0f6] pb-2 last:border-0">
+                <span className="font-semibold text-[#667085]">{titleFromKey(field)}</span>
+                <span className="break-words font-bold text-[#111827]">{formatValue(field, partner[field])}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-3 text-sm font-black">Uploaded Documents</h3>
+          {!data?.documents?.length ? (
+            <p className="rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">No live documents uploaded.</p>
+          ) : (
+            <div className="space-y-3">
+              {data.documents.map((document) => (
+                <div key={document.id} className="rounded-lg border border-[#edf0f6] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-black text-[#111827]">{titleFromKey(document.documentType)}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(document.uploadedAt)}</p>
+                    </div>
+                    <Status value={document.validationStatus} />
+                  </div>
+                  {document.url ? (
+                    <a href={document.url} target="_blank" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-[#e6eaf2] px-3 text-xs font-black text-[#0b6df6]">
+                      <Eye size={14} />
+                      Open File
+                    </a>
+                  ) : null}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button className="h-9 rounded-lg bg-[#079455] text-xs font-black text-white" onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })}>Verify</button>
+                    <button className="h-9 rounded-lg border border-[#ffd3dc] bg-white text-xs font-black text-[#d92d4b]" onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "rejected" })}>Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <h3 className="mb-3 text-sm font-black">Verification Support Tickets</h3>
+          {!data?.supportTickets?.length ? (
+            <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No support ticket for this partner.</p>
+          ) : data.supportTickets.slice(0, 5).map((ticket) => (
+            <div key={asText(ticket.id)} className="rounded-lg border border-[#edf0f6] p-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-black text-[#111827]">{asText(ticket.ticketId)}</span>
+                <Status value={asText(ticket.status)} />
+              </div>
+              <p className="mt-2 font-bold text-[#667085]">{asText(ticket.ticketCategory)}</p>
+              <p className="mt-1 line-clamp-3 text-[#475467]">{asText(ticket.complaint)}</p>
+            </div>
+          ))}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function DetailPanel({
+  resource,
+  row,
+  onAdminAction,
+  pendingAction,
+}: {
+  resource: string;
+  row: ResourceRow | null;
+  onAdminAction: (action: string, targetId: string) => void;
+  pendingAction?: string;
+}) {
   if (!row) {
     return (
       <div className="admin-card p-5">
@@ -265,6 +434,10 @@ function DetailPanel({ row }: { row: ResourceRow | null }) {
         <p className="mt-5 text-sm font-semibold text-[#667085]">Select a live row to inspect details.</p>
       </div>
     );
+  }
+
+  if ((resource === "partners" || resource === "partner-approvals") && row.id) {
+    return <PartnerDetailPanel row={row} onAdminAction={onAdminAction} pendingAction={pendingAction} />;
   }
 
   return (
@@ -399,7 +572,12 @@ export function ModulePage({ resource }: { resource: string }) {
           onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
           pendingAction={pendingAction}
         />
-        <DetailPanel row={selectedRow} />
+        <DetailPanel
+          resource={resource}
+          row={selectedRow}
+          onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+          pendingAction={pendingAction}
+        />
       </section>
     </div>
   );
