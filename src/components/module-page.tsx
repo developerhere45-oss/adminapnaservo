@@ -588,7 +588,7 @@ function PartnerDetailPanel({
         {isError && <div className="m-4 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">Full live profile unavailable.</div>}
         {isLoading && <div className="m-4 rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">Loading complete profile...</div>}
 
-        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_320px]">
+        <div className="grid min-w-0 gap-4 p-4">
           <section className="rounded-lg border border-[#edf0f6]">
             <div className="flex items-center gap-2 border-b border-[#edf0f6] px-4 py-3">
               <UserRound size={16} className="text-[#079455]" />
@@ -596,9 +596,9 @@ function PartnerDetailPanel({
             </div>
             <div className="divide-y divide-[#edf0f6] text-sm">
               {detailRows.map(([label, value]) => (
-                <div key={String(label)} className="grid grid-cols-[155px_1fr] gap-3 px-4 py-3">
+                <div key={String(label)} className="grid min-w-0 grid-cols-[145px_minmax(0,1fr)] gap-3 px-4 py-3">
                   <span className="font-semibold text-[#667085]">{label}</span>
-                  <span className="break-words font-black text-[#111827]">{formatValue(String(label), value)}</span>
+                  <span className="min-w-0 break-words font-black text-[#111827]">{formatValue(String(label), value)}</span>
                 </div>
               ))}
             </div>
@@ -644,14 +644,14 @@ function PartnerDetailPanel({
             <p className="mt-3 rounded-lg bg-[#f8fbff] p-3 text-sm font-semibold text-[#475467]">
               {asText(partner.fullName || row.name)} is registered for {formatValue("services", partner.professionServiceCategory || row.services)} with {formatValue("yearsOfExperience", partner.yearsOfExperience || 0)} years of experience.
             </p>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+            <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 text-xs">
               <div className="rounded-lg border border-[#edf0f6] p-3"><Clock3 size={15} className="mb-2 text-[#667085]" /><b>{asText(partner.yearsOfExperience || 0)}</b><br />Years Exp.</div>
               <div className="rounded-lg border border-[#edf0f6] p-3"><Wrench size={15} className="mb-2 text-[#667085]" /><b>{formatValue("services", partner.professionServiceCategory || row.services)}</b><br />Specialization</div>
               <div className="rounded-lg border border-[#edf0f6] p-3"><MapPin size={15} className="mb-2 text-[#667085]" /><b>{asText(partner.city || row.city)}</b><br />Service Area</div>
             </div>
           </section>
 
-          <section className="grid gap-4 xl:grid-cols-1">
+          <section className="grid min-w-0 gap-4">
             <div className="rounded-lg border border-[#edf0f6] p-4">
               <h3 className="text-sm font-black">Verification Notes</h3>
               <p className="mt-3 rounded-lg bg-[#effbf4] p-3 text-xs font-bold text-[#079455]">All documents and profile photo are fetched from the live backend. Verified documents: {verifiedDocumentCount}.</p>
