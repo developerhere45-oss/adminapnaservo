@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   AlertTriangle,
+  Ban,
   CalendarCheck,
   CalendarDays,
   CheckCircle2,
@@ -152,6 +153,34 @@ function statusStyle(value: string) {
 
 function Status({ value }: { value: string }) {
   return <span className={cn("status-pill", statusStyle(value))}>{value || "-"}</span>;
+}
+
+function isPartnerBlocked(row: ResourceRow) {
+  const account = asText(row.accountStatus || row.status).toLowerCase();
+  const trust = asText(row.trustStatus || row.trust).toLowerCase();
+  const approval = asText(row.currentVerificationStatus || row.approval).toLowerCase();
+  return account.includes("blocked")
+    || account.includes("suspended")
+    || trust.includes("suspended")
+    || approval.includes("blocked");
+}
+
+function isPartnerApprovalPending(row: ResourceRow) {
+  if (isPartnerBlocked(row)) return false;
+  const approval = asText(row.currentVerificationStatus || row.approval).toLowerCase();
+  const kyc = asText(row.kycStatus || row.kyc).toLowerCase();
+  if (approval.includes("approved") || approval.includes("denied") || approval.includes("rejected")) return false;
+  return approval.includes("waiting")
+    || approval.includes("under")
+    || approval.includes("pending")
+    || ["missing", "submitted", "pending_review"].includes(kyc);
+}
+
+function adminActionMessage(action: string) {
+  if (action === "approve-technician") return "Partner approved and notified.";
+  if (action === "reject-technician") return "Partner denied and notified.";
+  if (action === "block-technician" || action === "suspend-technician") return "Partner blocked and notified.";
+  return "Admin action completed.";
 }
 
 function initials(value: unknown) {
@@ -403,6 +432,7 @@ function DataTable({
                 })}
                 <td className="px-5 py-3">
                   {resource === "partner-approvals" && row.id ? (
+                    isPartnerApprovalPending(row) ? (
                     <div className="flex min-w-[180px] gap-2" onClick={(event) => event.stopPropagation()}>
                       <button
                         disabled={pendingAction === `${row.id}:approve-technician`}
@@ -421,8 +451,25 @@ function DataTable({
                         Deny
                       </button>
                     </div>
+                    ) : (
+                      <span className="text-xs font-black text-[#667085]">Decision complete</span>
+                    )
                   ) : resource === "bookings" && row.id ? (
                     <Link href={`/bookings/${encodeURIComponent(String(row.id))}`} className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => event.stopPropagation()}><Eye size={16} /></Link>
+                  ) : resource === "partners" && row.id ? (
+                    <div className="flex min-w-[130px] gap-2" onClick={(event) => event.stopPropagation()}>
+                      <button className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => { event.stopPropagation(); onSelect(row); }}><Eye size={16} /></button>
+                      {!isPartnerBlocked(row) && (
+                        <button
+                          disabled={pendingAction === `${row.id}:block-technician`}
+                          className="grid h-9 w-12 place-items-center rounded-lg border border-[#ffd3dc] bg-[#fff7f9] text-[#d92d4b] disabled:opacity-60"
+                          onClick={() => onAdminAction("block-technician", String(row.id))}
+                          title="Block partner"
+                        >
+                          <Ban size={16} />
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <button className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => { event.stopPropagation(); onSelect(row); }}><Eye size={16} /></button>
                   )}
@@ -465,6 +512,8 @@ function PartnerDetailPanel({
   });
 
   const partner = data?.partner || row;
+  const pendingDecision = isPartnerApprovalPending(partner);
+  const blockedPartner = isPartnerBlocked(partner);
   const profilePhoto = asText(partner.profilePhoto);
   const docs = data?.documents || [];
   const verifiedDocumentCount = docs.filter((document) => document.validationStatus === "accepted").length + (profilePhoto !== "-" ? 1 : 0);
@@ -516,9 +565,17 @@ function PartnerDetailPanel({
                 <p className="mt-1 text-xs font-semibold text-[#667085]">Registration Date: {formatDate(partner.registrationDate || row.joinedAt)}</p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />Approve Partner</button>
-              <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
+            <div className="flex flex-wrap gap-2">
+              {pendingDecision && (
+                <>
+                  <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />Approve Partner</button>
+                  <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
+                </>
+              )}
+              {!blockedPartner && (
+                <button disabled={pendingAction === `${partnerId}:block-technician`} onClick={() => onAdminAction("block-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-[#fff7f9] px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><Ban size={15} />Block Partner</button>
+              )}
+              {!pendingDecision && blockedPartner && <Status value="Blocked" />}
             </div>
           </div>
         </div>
@@ -725,9 +782,10 @@ export function ModulePage({ resource }: { resource: string }) {
       setActionMessage("");
     },
     onSuccess: async (_result, variables) => {
-      setActionMessage(variables.action === "approve-technician" ? "Partner approved and notified." : "Partner denied and notified.");
+      setActionMessage(adminActionMessage(variables.action));
       setSelected(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", resource] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile"] });
     },
     onError: (error) => {
       setActionMessage(error instanceof Error ? error.message : "Action failed");
