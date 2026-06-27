@@ -104,6 +104,29 @@ async function updatePartnerDocument(partnerId: string, documentId: string, vali
   return response.json();
 }
 
+async function sendPartnerNotification(partnerId: string, message: string) {
+  const response = await fetch("/api/admin/notifications/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": `partner-message-${partnerId}-${Date.now()}`,
+    },
+    body: JSON.stringify({
+      targetType: "SPECIFIC_PARTNER",
+      recipientId: partnerId,
+      title: "Message from ApnaServo Admin",
+      message,
+      actionType: "OPEN_PARTNER_HOME",
+      actionId: "",
+    }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(typeof payload.message === "string" ? payload.message : "Message send failed");
+  }
+  return response.json();
+}
+
 function asText(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -233,6 +256,11 @@ function copyText(value: unknown) {
   const text = asText(value);
   if (text === "-") return;
   navigator.clipboard?.writeText(text).catch(() => undefined);
+}
+
+function fileNameForDocument(document: PartnerDocument) {
+  const baseName = document.originalName || documentLabel(document.documentType);
+  return baseName.replace(/[^\w.-]+/g, "_") || "partner-document";
 }
 
 function columnsFor(resource: string, rows: ResourceRow[]) {
@@ -497,6 +525,7 @@ function PartnerDetailPanel({
 }) {
   const partnerId = String(row.id || "");
   const queryClient = useQueryClient();
+  const [quickActionMessage, setQuickActionMessage] = useState("");
   const { data, isLoading, isError } = useQuery({
     queryKey: ["admin-partner-profile", partnerId],
     queryFn: () => fetchPartnerProfile(partnerId),
@@ -510,6 +539,18 @@ function PartnerDetailPanel({
       await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
     },
   });
+  const messageMutation = useMutation({
+    mutationFn: (message: string) => sendPartnerNotification(partnerId, message),
+    onMutate: () => setQuickActionMessage(""),
+    onSuccess: () => setQuickActionMessage("Message sent to partner."),
+    onError: (error) => setQuickActionMessage(error instanceof Error ? error.message : "Message send failed."),
+  });
+
+  function handleSendMessage() {
+    const message = window.prompt("Message to partner", "Please keep your device online to receive bookings from ApnaServo.");
+    if (!message?.trim()) return;
+    messageMutation.mutate(message.trim());
+  }
 
   const partner = data?.partner || row;
   const pendingDecision = isPartnerApprovalPending(partner);
@@ -617,7 +658,7 @@ function PartnerDetailPanel({
                 <p className="rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">No profile photo or documents uploaded yet.</p>
               ) : visibleDocs.map((document) => (
                 <div key={document.id} className="flex gap-3 rounded-lg border border-[#edf0f6] p-2">
-                  <a href={document.url || "#"} target="_blank" className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f8fbff]">
+                  <a href={document.url || "#"} target="_blank" rel="noreferrer" className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f8fbff]">
                     {document.url && (document.mimeType?.startsWith("image/") || document.url.startsWith("data:image/")) ? (
                       <img src={document.url} alt={documentLabel(document.documentType)} className="h-full w-full object-cover" />
                     ) : <FileText size={22} className="text-[#667085]" />}
@@ -625,7 +666,7 @@ function PartnerDetailPanel({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-black text-[#111827]">{documentLabel(document.documentType)}</p>
                     <Status value={document.validationStatus === "accepted" ? "Verified" : document.validationStatus} />
-                    {document.url ? <a href={document.url} target="_blank" className="mt-1 block text-xs font-black text-[#0b6df6]">View</a> : <p className="mt-1 text-xs font-bold text-[#d92d4b]">Missing file URL</p>}
+                    {document.url ? <a href={document.url} target="_blank" rel="noreferrer" className="mt-1 block text-xs font-black text-[#0b6df6]">View</a> : <p className="mt-1 text-xs font-bold text-[#d92d4b]">Missing file URL</p>}
                     {document.id !== "profile-photo" && (
                       <div className="mt-2 flex gap-2">
                         <button onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })} className="rounded-md bg-[#e8f8ef] px-2 py-1 text-[11px] font-black text-[#079455]">Verify</button>
@@ -633,7 +674,18 @@ function PartnerDetailPanel({
                       </div>
                     )}
                   </div>
-                  {document.url ? <a href={document.url} target="_blank" className="grid h-9 w-9 place-items-center rounded-lg border border-[#d7f2e2] text-[#079455]"><Download size={15} /></a> : null}
+                  {document.url ? (
+                    <a
+                      href={`/api/admin/partners/${encodeURIComponent(partnerId)}/documents/${encodeURIComponent(document.id)}`}
+                      download={fileNameForDocument(document)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Download document"
+                      className="grid h-9 w-9 place-items-center rounded-lg border border-[#d7f2e2] text-[#079455]"
+                    >
+                      <Download size={15} />
+                    </a>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -658,8 +710,27 @@ function PartnerDetailPanel({
             </div>
             <div className="rounded-lg border border-[#edf0f6] p-4">
               <h3 className="text-sm font-black">Quick Actions</h3>
-              <button className="mt-3 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black"><span className="inline-flex items-center gap-2"><MessageSquare size={15} />Send Message</span><span>›</span></button>
-              <button className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black"><span className="inline-flex items-center gap-2"><UserRound size={15} />View Partner Profile</span><span>›</span></button>
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={messageMutation.isPending || !partnerId}
+                className="mt-3 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black disabled:opacity-60"
+              >
+                <span className="inline-flex items-center gap-2"><MessageSquare size={15} />Send Message</span>
+                <span>{messageMutation.isPending ? "Sending" : ">"}</span>
+              </button>
+              <Link
+                href={`/partners/${encodeURIComponent(partnerId)}`}
+                className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black"
+              >
+                <span className="inline-flex items-center gap-2"><UserRound size={15} />View Partner Profile</span>
+                <span>{">"}</span>
+              </Link>
+              {quickActionMessage ? (
+                <p className={cn("mt-3 rounded-lg p-3 text-xs font-bold", quickActionMessage.includes("failed") ? "bg-[#fff7f9] text-[#d92d4b]" : "bg-[#effbf4] text-[#079455]")}>
+                  {quickActionMessage}
+                </p>
+              ) : null}
             </div>
           </section>
         </div>
@@ -760,6 +831,47 @@ function LogoutPage() {
           <Link href="/dashboard" className="mt-8 grid h-12 w-full place-items-center rounded-lg bg-[#0b6df6] text-sm font-black text-white">Back to Dashboard</Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function StandalonePartnerProfile({ partnerId }: { partnerId: string }) {
+  const [actionMessage, setActionMessage] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
+  const queryClient = useQueryClient();
+  const actionMutation = useMutation({
+    mutationFn: ({ action, targetId }: { action: string; targetId: string }) => runAdminAction(action, targetId),
+    onMutate: ({ action, targetId }) => {
+      setPendingAction(`${targetId}:${action}`);
+      setActionMessage("");
+    },
+    onSuccess: async (_result, variables) => {
+      setActionMessage(adminActionMessage(variables.action));
+      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partners"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partner-approvals"] });
+    },
+    onError: (error) => {
+      setActionMessage(error instanceof Error ? error.message : "Admin action failed.");
+    },
+    onSettled: () => setPendingAction(""),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/partners" className="text-sm font-black text-[#0b6df6]">Back to Partners</Link>
+        {actionMessage ? (
+          <span className={cn("rounded-lg px-3 py-2 text-xs font-bold", actionMessage.includes("failed") ? "bg-[#fff7f9] text-[#d92d4b]" : "bg-[#eef5ff] text-[#0b6df6]")}>
+            {actionMessage}
+          </span>
+        ) : null}
+      </div>
+      <PartnerDetailPanel
+        row={{ id: partnerId }}
+        pendingAction={pendingAction}
+        onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+      />
     </div>
   );
 }

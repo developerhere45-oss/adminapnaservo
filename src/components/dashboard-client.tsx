@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -162,9 +163,9 @@ function PageTitle({ isFetching, onRefresh }: { isFetching: boolean; onRefresh: 
   );
 }
 
-function MetricCard({ label, value, note, icon: Icon, tone }: { label: string; value: string; note: string; icon: typeof Users; tone: string }) {
+function MetricCard({ label, value, note, icon: Icon, tone, href }: { label: string; value: string; note: string; icon: typeof Users; tone: string; href: string }) {
   return (
-    <div className="admin-card p-5">
+    <Link href={href} className="admin-card block p-5 transition hover:-translate-y-0.5 hover:border-[#bfd5ff] hover:shadow-md">
       <div className="flex items-center gap-4">
         <div className={cn("metric-icon", tone)}>
           <Icon size={28} />
@@ -175,7 +176,7 @@ function MetricCard({ label, value, note, icon: Icon, tone }: { label: string; v
           <p className="mt-2 text-xs font-bold text-[#079455]">{note}</p>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -335,11 +336,11 @@ export function DashboardClient() {
       {isError && <div className="admin-card mb-5 border-[#ffd3dc] bg-[#fff7f9] p-4 text-sm font-bold text-[#d92d4b]">Live backend unavailable. No default dashboard data is being shown.</div>}
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-5">
-        <MetricCard label="Total Users" value={formatNumber(analytics.totalUsers)} note={`${formatNumber(analytics.newUsersToday)} new today`} icon={Users} tone="bg-[#eef5ff] text-[#0b6df6]" />
-        <MetricCard label="Total Partners" value={formatNumber(analytics.totalPartners)} note={`${formatNumber(analytics.activePartners)} active`} icon={ShieldCheck} tone="bg-[#e8f8ef] text-[#079455]" />
-        <MetricCard label="Total Bookings" value={formatNumber(analytics.totalBookings)} note={`${formatNumber(analytics.completedBookings)} completed`} icon={ClipboardList} tone="bg-[#f3eaff] text-[#8b5cf6]" />
-        <MetricCard label="Total Revenue" value={formatMoney(analytics.totalRevenue)} note={`${formatMoney(analytics.platformCommission)} commission`} icon={IndianRupee} tone="bg-[#fff4df] text-[#f59e0b]" />
-        <MetricCard label="Pending Payments" value={formatMoney(analytics.pendingPaymentAmount)} note={`${formatNumber(analytics.totalTransactions)} transactions`} icon={WalletCards} tone="bg-[#ffebef] text-[#d92d4b]" />
+        <MetricCard href="/users" label="Total Users" value={formatNumber(analytics.totalUsers)} note={`${formatNumber(analytics.newUsersToday)} new today`} icon={Users} tone="bg-[#eef5ff] text-[#0b6df6]" />
+        <MetricCard href="/partners" label="Total Partners" value={formatNumber(analytics.totalPartners)} note={`${formatNumber(analytics.activePartners)} active`} icon={ShieldCheck} tone="bg-[#e8f8ef] text-[#079455]" />
+        <MetricCard href="/bookings" label="Total Bookings" value={formatNumber(analytics.totalBookings)} note={`${formatNumber(analytics.completedBookings)} completed`} icon={ClipboardList} tone="bg-[#f3eaff] text-[#8b5cf6]" />
+        <MetricCard href="/payments" label="Total Revenue" value={formatMoney(analytics.totalRevenue)} note={`${formatMoney(analytics.platformCommission)} commission`} icon={IndianRupee} tone="bg-[#fff4df] text-[#f59e0b]" />
+        <MetricCard href="/payments" label="Pending Payments" value={formatMoney(analytics.pendingPaymentAmount)} note={`${formatNumber(analytics.totalTransactions)} transactions`} icon={WalletCards} tone="bg-[#ffebef] text-[#d92d4b]" />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.1fr_.95fr]">
