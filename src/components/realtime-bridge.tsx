@@ -133,12 +133,24 @@ export function RealtimeBridge() {
   useEffect(() => {
     let socket: Socket | null = null;
     let closed = false;
+    let reconnectTimer: number | null = null;
+    let healthTimer: number | null = null;
+
+    function scheduleReconnect(delayMs = 8000) {
+      if (closed || reconnectTimer) return;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        if (!closed && !socket?.connected) connect();
+      }, delayMs);
+    }
 
     async function connect() {
       try {
+        await fetch("/api/admin/backend-health", { cache: "no-store" }).catch(() => null);
         const response = await fetch("/api/admin/realtime-token", { cache: "no-store" });
         if (!response.ok) {
           pushEvent("Realtime token unavailable");
+          scheduleReconnect();
           return;
         }
         const config = (await response.json()) as { backendUrl: string; token: string };
@@ -164,11 +176,13 @@ export function RealtimeBridge() {
         socket.on("disconnect", () => {
           setConnected(false);
           pushEvent("Backend disconnected");
+          scheduleReconnect();
         });
 
         socket.on("connect_error", (error) => {
           setConnected(false);
           pushEvent(`Realtime connection failed: ${error.message || "unknown error"}`);
+          scheduleReconnect();
         });
 
         for (const eventName of adminEvents) {
@@ -186,13 +200,19 @@ export function RealtimeBridge() {
       } catch {
         setConnected(false);
         pushEvent("Realtime connection failed");
+        scheduleReconnect();
       }
     }
 
     connect();
+    healthTimer = window.setInterval(() => {
+      fetch("/api/admin/backend-health", { cache: "no-store" }).catch(() => null);
+    }, 60_000);
 
     return () => {
       closed = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      if (healthTimer) window.clearInterval(healthTimer);
       socket?.disconnect();
     };
   }, [pushEvent, queryClient, setBackendUrl, setConnected]);

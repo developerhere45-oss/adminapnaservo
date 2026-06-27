@@ -4,19 +4,28 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   Clock3,
+  Clipboard,
+  Copy,
   Download,
   Eye,
+  FileText,
   Filter,
   IndianRupee,
   LogOut,
+  MapPin,
+  MessageSquare,
+  MoreVertical,
   RefreshCw,
   Search,
   Settings,
   Star,
+  UserRound,
   Users,
   WalletCards,
+  Wrench,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -145,6 +154,58 @@ function Status({ value }: { value: string }) {
   return <span className={cn("status-pill", statusStyle(value))}>{value || "-"}</span>;
 }
 
+function initials(value: unknown) {
+  const words = asText(value).replace("-", "ApnaServo").split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join("") || "AS";
+}
+
+function documentLabel(type: string) {
+  const labels: Record<string, string> = {
+    aadhaar_front: "Aadhaar Card Front",
+    aadhaar_back: "Aadhaar Card Back",
+    pan_card: "PAN Card",
+    selfie_photo: "Selfie / Face Photo",
+    profile_photo: "Profile Photo",
+    id_proof: "Identity Proof",
+    address_proof: "Address Proof",
+    experience_certificate: "Experience Certificate",
+    skill_certificate: "Skill Certificate",
+    training_certificate: "Training Certificate",
+    government_license: "Government License",
+    trade_license: "Trade License",
+    other_supporting_document: "Supporting Document",
+  };
+  return labels[type] || titleFromKey(type || "Document");
+}
+
+function serviceTone(service: unknown) {
+  const value = asText(service).toLowerCase();
+  if (value.includes("plumb")) return "bg-[#fff0f4] text-[#f32368]";
+  if (value.includes("electric")) return "bg-[#fff8e6] text-[#c26a00]";
+  if (value.includes("clean")) return "bg-[#e8f8ef] text-[#079455]";
+  return "bg-[#eef5ff] text-[#0b6df6]";
+}
+
+function shortDate(value: unknown) {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return asText(value);
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function shortTime(value: unknown) {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function copyText(value: unknown) {
+  const text = asText(value);
+  if (text === "-") return;
+  navigator.clipboard?.writeText(text).catch(() => undefined);
+}
+
 function columnsFor(resource: string, rows: ResourceRow[]) {
   const known: Record<string, string[]> = {
     bookings: ["bookingCode", "userName", "userMobile", "serviceName", "partnerName", "bookingDateTime", "scheduledDateTime", "status", "finalServiceCost", "paymentStatus"],
@@ -190,6 +251,93 @@ function MetricCard({ label, value, index }: { label: string; value: unknown; in
           <p className="text-sm font-semibold text-[#475467]">{titleFromKey(label)}</p>
           <p className="mt-1 text-2xl font-black">{formatValue(label, value)}</p>
           <p className="mt-2 text-xs font-bold text-[#079455]">Live database</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BookingOperationsTable({ rows }: { rows: ResourceRow[] }) {
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) => Object.values(row).some((value) => asText(value).toLowerCase().includes(needle)));
+  }, [rows, search]);
+  const visible = filtered.slice(0, 10);
+
+  return (
+    <div className="admin-card overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#edf0f6] px-5 py-5">
+        <div>
+          <h2 className="text-xl font-black text-[#111827]">Bookings List</h2>
+          <p className="mt-1 text-sm font-semibold text-[#667085]">Manage and track all customer bookings in real time</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#667085]" size={17} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 w-[360px] max-w-full rounded-lg border border-[#e6eaf2] bg-white px-10 text-sm font-semibold outline-none" placeholder="Search live records..." />
+          </div>
+          <button className="flex h-11 items-center gap-2 rounded-lg border border-[#bfd5ff] bg-white px-4 text-sm font-black text-[#0b6df6]"><Filter size={16} />Filter</button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1220px] text-left text-sm">
+          <thead className="bg-[#fbfcff] text-xs text-[#667085]">
+            <tr>
+              {["Booking Code", "User Name", "User Mobile", "Service Name", "Partner Name", "Booking Date Time", "Scheduled Date Time", "Status", "Final Service Cost", "Payment Status", "Action"].map((head) => (
+                <th key={head} className="px-5 py-4 font-black">{head}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 ? (
+              <tr><td colSpan={11} className="px-5 py-14 text-center text-sm font-semibold text-[#667085]">No live bookings found.</td></tr>
+            ) : visible.map((row) => (
+              <tr key={asText(row.id || row.bookingCode)} className="border-t border-[#edf0f6] odd:bg-[#f8fbff] hover:bg-[#f4f8ff]">
+                <td className="px-5 py-4 align-top">
+                  <p className="font-black text-[#111827]">{asText(row.bookingCode)}</p>
+                  <button onClick={() => copyText(row.bookingCode)} className="mt-2 inline-flex items-center gap-1 text-xs font-black text-[#0b6df6]"><Copy size={13} />Copy</button>
+                </td>
+                <td className="px-5 py-4 align-top">
+                  <p className="font-black text-[#111827]">{asText(row.userName)}</p>
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#667085]"><UserRound size={13} />Customer</p>
+                </td>
+                <td className="px-5 py-4 align-top font-bold text-[#263149]">{asText(row.userMobile)}</td>
+                <td className="px-5 py-4 align-top">
+                  <div className="flex items-center gap-3">
+                    <span className={cn("grid h-9 w-9 place-items-center rounded-lg", serviceTone(row.serviceName || row.serviceCategory))}><Wrench size={17} /></span>
+                    <div>
+                      <p className="font-black text-[#263149]">{asText(row.serviceName)}</p>
+                      {row.serviceCategory ? <p className="text-xs font-semibold text-[#667085]">{asText(row.serviceCategory)}</p> : null}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-5 py-4 align-top font-bold text-[#263149]">{asText(row.partnerName)}</td>
+                <td className="px-5 py-4 align-top">
+                  <p className="inline-flex items-center gap-2 font-black text-[#263149]"><CalendarDays size={15} className="text-[#0b6df6]" />{shortDate(row.bookingDateTime)}</p>
+                  <p className="mt-1 text-xs font-semibold text-[#263149]">{shortTime(row.bookingDateTime)}</p>
+                </td>
+                <td className="px-5 py-4 align-top">
+                  <p className="inline-flex items-center gap-2 font-black text-[#263149]"><Clock3 size={15} className="text-[#8b5cf6]" />{asText(row.scheduledDateTime)}</p>
+                </td>
+                <td className="px-5 py-4 align-top"><Status value={asText(row.status)} /></td>
+                <td className="px-5 py-4 align-top font-black text-[#111827]">{formatMoney(row.finalServiceCost)}</td>
+                <td className="px-5 py-4 align-top"><Status value={asText(row.paymentStatus)} /></td>
+                <td className="px-5 py-4 align-top">
+                  <Link href={`/bookings/${encodeURIComponent(asText(row.id))}`} className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2] bg-white text-[#0b6df6]"><Eye size={16} /></Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf0f6] px-5 py-4 text-sm font-semibold text-[#667085]">
+        <span>Showing {visible.length ? `1 to ${visible.length}` : "0"} of {filtered.length} bookings</span>
+        <div className="flex items-center gap-2">
+          {[1, 2, 3].map((page) => <button key={page} className={cn("h-9 w-9 rounded-lg border border-[#e6eaf2] font-black", page === 1 ? "bg-[#0b6df6] text-white" : "bg-white text-[#263149]")}>{page}</button>)}
+          <span className="px-2">...</span>
+          <button className="h-9 w-9 rounded-lg border border-[#e6eaf2] bg-white font-black text-[#263149]">{Math.max(Math.ceil(filtered.length / 10), 1)}</button>
         </div>
       </div>
     </div>
@@ -318,126 +466,146 @@ function PartnerDetailPanel({
 
   const partner = data?.partner || row;
   const profilePhoto = asText(partner.profilePhoto);
-  const fields = [
-    "fullName", "mobileNumber", "email", "dateOfBirth", "gender", "completeResidentialAddress",
-    "city", "state", "pinCode", "emergencyContactNumber", "professionServiceCategory",
-    "yearsOfExperience", "workingAreas", "serviceArea", "languagesKnown", "registrationDate",
-    "currentVerificationStatus", "kycStatus", "trustStatus", "accountStatus",
+  const docs = data?.documents || [];
+  const verifiedDocumentCount = docs.filter((document) => document.validationStatus === "accepted").length + (profilePhoto !== "-" ? 1 : 0);
+  const profileDocument = profilePhoto !== "-" ? [{
+    id: "profile-photo",
+    documentType: "profile_photo",
+    originalName: "Profile Photo",
+    mimeType: "image/jpeg",
+    sizeBytes: 0,
+    url: profilePhoto,
+    storageProvider: "profile",
+    validationStatus: asText(partner.currentVerificationStatus) === "Approved" ? "accepted" : "review",
+    validationReasons: [],
+    uploadedAt: asText(partner.registrationDate),
+  } satisfies PartnerDocument] : [];
+  const visibleDocs = [...profileDocument, ...docs];
+  const detailRows: Array<[string, unknown]> = [
+    ["Emergency Contact Number", partner.emergencyContactNumber],
+    ["Profession Service Category", partner.professionServiceCategory],
+    ["Years Of Experience", partner.yearsOfExperience],
+    ["Working Areas", partner.workingAreas],
+    ["Service Area", partner.serviceArea],
+    ["Languages Known", partner.languagesKnown],
+    ["Registration Date", partner.registrationDate],
+    ["Current Verification Status", partner.currentVerificationStatus],
+    ["Kyc Status", partner.kycStatus],
+    ["Trust Status", partner.trustStatus],
+    ["Account Status", partner.accountStatus],
   ];
 
   return (
-    <div className="admin-card p-5">
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-black">Partner Verification</h2>
-          <p className="mt-1 text-xs font-bold text-[#667085]">{asText(partner.partnerCode || row.code)}</p>
+    <div className="space-y-4">
+      <div className="admin-card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-3">
+          <button className="text-xs font-black text-[#667085]">Back to Partners</button>
+          <button className="grid h-8 w-8 place-items-center rounded-lg border border-[#e6eaf2] text-[#667085]"><MoreVertical size={16} /></button>
         </div>
-        {partner.currentVerificationStatus ? <Status value={asText(partner.currentVerificationStatus)} /> : null}
-      </div>
-
-      {isError && <div className="mb-4 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">Full live profile unavailable.</div>}
-      {isLoading && <div className="mb-4 rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">Loading complete profile...</div>}
-
-      <div className="mb-5 grid grid-cols-2 gap-2">
-        <button
-          disabled={pendingAction === `${partnerId}:approve-technician`}
-          className="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#079455] text-xs font-black text-white disabled:opacity-60"
-          onClick={() => onAdminAction("approve-technician", partnerId)}
-        >
-          <CheckCircle2 size={15} />
-          Approve
-        </button>
-        <button
-          disabled={pendingAction === `${partnerId}:reject-technician`}
-          className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ffd3dc] bg-white text-xs font-black text-[#d92d4b] disabled:opacity-60"
-          onClick={() => onAdminAction("reject-technician", partnerId)}
-        >
-          <XCircle size={15} />
-          Reject
-        </button>
-      </div>
-
-      <div className="max-h-[720px] space-y-5 overflow-y-auto pr-1">
-        <section>
-          <h3 className="mb-3 text-sm font-black">Complete Profile</h3>
-          <div className="mb-4 flex items-center gap-3 rounded-lg border border-[#edf0f6] bg-[#f8fbff] p-3">
-            {profilePhoto !== "-" ? (
-              <img src={profilePhoto} alt="Partner profile" className="h-16 w-16 rounded-full border border-[#dbeafe] object-cover" />
-            ) : (
-              <div className="grid h-16 w-16 place-items-center rounded-full bg-[#eef5ff] text-sm font-black text-[#0b6df6]">AS</div>
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-black text-[#111827]">Profile Photo</p>
-              <p className="mt-1 break-all text-xs font-semibold text-[#667085]">{profilePhoto !== "-" ? "Uploaded and available for review" : "No uploaded profile photo found"}</p>
-              {profilePhoto !== "-" && <a href={profilePhoto} target="_blank" className="mt-2 inline-flex text-xs font-black text-[#0b6df6]">Open profile photo</a>}
+        <div className="bg-gradient-to-r from-[#eefbf4] to-[#f8fffb] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              {profilePhoto !== "-" ? (
+                <img src={profilePhoto} alt="Partner profile" className="h-16 w-16 rounded-full border-4 border-white object-cover shadow-sm" />
+              ) : (
+                <div className="grid h-16 w-16 place-items-center rounded-full bg-[#dff8ea] text-lg font-black text-[#079455]">{initials(partner.fullName || partner.name)}</div>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-lg font-black text-[#111827]">Partner Verification</h2>
+                <p className="mt-1 text-xs font-bold text-[#667085]">{asText(partner.partnerCode || row.code)} <Status value={asText(partner.currentVerificationStatus || row.approval)} /></p>
+                <p className="mt-1 text-xs font-semibold text-[#667085]">Registration Date: {formatDate(partner.registrationDate || row.joinedAt)}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />Approve Partner</button>
+              <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
             </div>
           </div>
-          <div className="space-y-3 text-sm">
-            {fields.map((field) => (
-              <div key={field} className="grid grid-cols-[145px_1fr] gap-3 border-b border-[#edf0f6] pb-2 last:border-0">
-                <span className="font-semibold text-[#667085]">{titleFromKey(field)}</span>
-                <span className="break-words font-bold text-[#111827]">{formatValue(field, partner[field])}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        </div>
+        <div className="flex gap-2 border-b border-[#edf0f6] px-4 py-3 text-xs font-black">
+          {["Overview", "Documents", "History", "Activity"].map((tab, index) => (
+            <span key={tab} className={cn("rounded-lg px-3 py-2", index === 0 ? "bg-[#e8f8ef] text-[#079455]" : "text-[#667085]")}>{tab}</span>
+          ))}
+        </div>
 
-        <section>
-          <h3 className="mb-3 text-sm font-black">Uploaded Documents</h3>
-          {!data?.documents?.length ? (
-            <p className="rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">No live documents uploaded.</p>
-          ) : (
-            <div className="space-y-3">
-              {data.documents.map((document) => (
-                <div key={document.id} className="rounded-lg border border-[#edf0f6] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-black text-[#111827]">{titleFromKey(document.documentType)}</p>
-                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(document.uploadedAt)} | {document.storageProvider || "storage"} | {document.sizeBytes ? `${Math.round(document.sizeBytes / 1024)} KB` : "size unknown"}</p>
-                    </div>
-                    <Status value={document.validationStatus} />
-                  </div>
-                  {document.url && (document.mimeType?.startsWith("image/") || document.url.startsWith("data:image/")) ? (
-                    <a href={document.url} target="_blank" className="mt-3 block overflow-hidden rounded-lg border border-[#edf0f6] bg-[#f8fbff]">
-                      <img src={document.url} alt={titleFromKey(document.documentType)} className="h-36 w-full object-cover" />
-                    </a>
-                  ) : null}
-                  {document.url ? (
-                    <a href={document.url} target="_blank" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-[#e6eaf2] px-3 text-xs font-black text-[#0b6df6]">
-                      <Eye size={14} />
-                      Open File
-                    </a>
-                  ) : (
-                    <p className="mt-3 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">File URL missing. Ask partner to re-upload this document.</p>
-                  )}
-                  {document.validationReasons?.length ? (
-                    <p className="mt-2 text-xs font-semibold text-[#667085]">Checks: {document.validationReasons.join(", ")}</p>
-                  ) : null}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button className="h-9 rounded-lg bg-[#079455] text-xs font-black text-white" onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })}>Verify</button>
-                    <button className="h-9 rounded-lg border border-[#ffd3dc] bg-white text-xs font-black text-[#d92d4b]" onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "rejected" })}>Reject</button>
-                  </div>
+        {isError && <div className="m-4 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">Full live profile unavailable.</div>}
+        {isLoading && <div className="m-4 rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">Loading complete profile...</div>}
+
+        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_320px]">
+          <section className="rounded-lg border border-[#edf0f6]">
+            <div className="flex items-center gap-2 border-b border-[#edf0f6] px-4 py-3">
+              <UserRound size={16} className="text-[#079455]" />
+              <h3 className="text-sm font-black">Partner Details</h3>
+            </div>
+            <div className="divide-y divide-[#edf0f6] text-sm">
+              {detailRows.map(([label, value]) => (
+                <div key={String(label)} className="grid grid-cols-[155px_1fr] gap-3 px-4 py-3">
+                  <span className="font-semibold text-[#667085]">{label}</span>
+                  <span className="break-words font-black text-[#111827]">{formatValue(String(label), value)}</span>
                 </div>
               ))}
             </div>
-          )}
-        </section>
+          </section>
 
-        <section>
-          <h3 className="mb-3 text-sm font-black">Verification Support Tickets</h3>
-          {!data?.supportTickets?.length ? (
-            <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No support ticket for this partner.</p>
-          ) : data.supportTickets.slice(0, 5).map((ticket) => (
-            <div key={asText(ticket.id)} className="rounded-lg border border-[#edf0f6] p-3 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[#111827]">{asText(ticket.ticketId)}</span>
-                <Status value={asText(ticket.status)} />
+          <section className="rounded-lg border border-[#edf0f6]">
+            <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-3">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-[#079455]" />
+                <h3 className="text-sm font-black">Uploaded Documents</h3>
               </div>
-              <p className="mt-2 font-bold text-[#667085]">{asText(ticket.ticketCategory)}</p>
-              <p className="mt-1 line-clamp-3 text-[#475467]">{asText(ticket.complaint)}</p>
+              <span className="rounded-full bg-[#e8f8ef] px-2 py-1 text-xs font-black text-[#079455]">{visibleDocs.length}</span>
             </div>
-          ))}
-        </section>
+            <div className="max-h-[520px] space-y-3 overflow-y-auto p-4">
+              {visibleDocs.length === 0 ? (
+                <p className="rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">No profile photo or documents uploaded yet.</p>
+              ) : visibleDocs.map((document) => (
+                <div key={document.id} className="flex gap-3 rounded-lg border border-[#edf0f6] p-2">
+                  <a href={document.url || "#"} target="_blank" className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f8fbff]">
+                    {document.url && (document.mimeType?.startsWith("image/") || document.url.startsWith("data:image/")) ? (
+                      <img src={document.url} alt={documentLabel(document.documentType)} className="h-full w-full object-cover" />
+                    ) : <FileText size={22} className="text-[#667085]" />}
+                  </a>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-black text-[#111827]">{documentLabel(document.documentType)}</p>
+                    <Status value={document.validationStatus === "accepted" ? "Verified" : document.validationStatus} />
+                    {document.url ? <a href={document.url} target="_blank" className="mt-1 block text-xs font-black text-[#0b6df6]">View</a> : <p className="mt-1 text-xs font-bold text-[#d92d4b]">Missing file URL</p>}
+                    {document.id !== "profile-photo" && (
+                      <div className="mt-2 flex gap-2">
+                        <button onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })} className="rounded-md bg-[#e8f8ef] px-2 py-1 text-[11px] font-black text-[#079455]">Verify</button>
+                        <button onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "rejected" })} className="rounded-md bg-[#fff0f4] px-2 py-1 text-[11px] font-black text-[#d92d4b]">Reject</button>
+                      </div>
+                    )}
+                  </div>
+                  {document.url ? <a href={document.url} target="_blank" className="grid h-9 w-9 place-items-center rounded-lg border border-[#d7f2e2] text-[#079455]"><Download size={15} /></a> : null}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-[#edf0f6] p-4">
+            <div className="flex items-center gap-2"><UserRound size={16} className="text-[#079455]" /><h3 className="text-sm font-black">About Partner</h3></div>
+            <p className="mt-3 rounded-lg bg-[#f8fbff] p-3 text-sm font-semibold text-[#475467]">
+              {asText(partner.fullName || row.name)} is registered for {formatValue("services", partner.professionServiceCategory || row.services)} with {formatValue("yearsOfExperience", partner.yearsOfExperience || 0)} years of experience.
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg border border-[#edf0f6] p-3"><Clock3 size={15} className="mb-2 text-[#667085]" /><b>{asText(partner.yearsOfExperience || 0)}</b><br />Years Exp.</div>
+              <div className="rounded-lg border border-[#edf0f6] p-3"><Wrench size={15} className="mb-2 text-[#667085]" /><b>{formatValue("services", partner.professionServiceCategory || row.services)}</b><br />Specialization</div>
+              <div className="rounded-lg border border-[#edf0f6] p-3"><MapPin size={15} className="mb-2 text-[#667085]" /><b>{asText(partner.city || row.city)}</b><br />Service Area</div>
+            </div>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-1">
+            <div className="rounded-lg border border-[#edf0f6] p-4">
+              <h3 className="text-sm font-black">Verification Notes</h3>
+              <p className="mt-3 rounded-lg bg-[#effbf4] p-3 text-xs font-bold text-[#079455]">All documents and profile photo are fetched from the live backend. Verified documents: {verifiedDocumentCount}.</p>
+            </div>
+            <div className="rounded-lg border border-[#edf0f6] p-4">
+              <h3 className="text-sm font-black">Quick Actions</h3>
+              <button className="mt-3 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black"><span className="inline-flex items-center gap-2"><MessageSquare size={15} />Send Message</span><span>›</span></button>
+              <button className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black"><span className="inline-flex items-center gap-2"><UserRound size={15} />View Partner Profile</span><span>›</span></button>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
@@ -590,22 +758,28 @@ export function ModulePage({ resource }: { resource: string }) {
         ) : metrics.map(([label, value], index) => <MetricCard key={label} label={label} value={value} index={index} />)}
       </section>
 
-      <section className="mt-5 grid gap-5 2xl:grid-cols-[1fr_430px]">
-        <DataTable
-          resource={resource}
-          rows={rows}
-          selectedId={asText(selectedRow?.id)}
-          onSelect={setSelected}
-          onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
-          pendingAction={pendingAction}
-        />
-        <DetailPanel
-          resource={resource}
-          row={selectedRow}
-          onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
-          pendingAction={pendingAction}
-        />
-      </section>
+      {resource === "bookings" ? (
+        <section className="mt-5">
+          <BookingOperationsTable rows={rows} />
+        </section>
+      ) : (
+        <section className="mt-5 grid gap-5 2xl:grid-cols-[1fr_430px]">
+          <DataTable
+            resource={resource}
+            rows={rows}
+            selectedId={asText(selectedRow?.id)}
+            onSelect={setSelected}
+            onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+            pendingAction={pendingAction}
+          />
+          <DetailPanel
+            resource={resource}
+            row={selectedRow}
+            onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+            pendingAction={pendingAction}
+          />
+        </section>
+      )}
     </div>
   );
 }
