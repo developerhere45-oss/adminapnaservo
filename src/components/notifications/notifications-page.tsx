@@ -290,9 +290,9 @@ export function NotificationsPage() {
     const form = new FormData();
     form.append("image", file);
     try {
-      const result = await jsonFetch<{ imageUrl: string }>("/api/admin/notifications/upload-image", { method: "POST", body: form });
+      const result = await jsonFetch<{ imageUrl: string; storageProvider?: string }>("/api/admin/notifications/upload-image", { method: "POST", body: form });
       setImageUrl(result.imageUrl);
-      setUploadMessage("Image uploaded");
+      setUploadMessage(result.storageProvider === "mongodb" ? "Image uploaded to backend storage" : "Image uploaded");
     } catch (error) {
       setUploadMessage(error instanceof Error ? error.message : "Image upload failed");
     }
