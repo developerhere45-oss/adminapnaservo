@@ -88,13 +88,25 @@ async function runAdminAction(action: string, targetId: string) {
   return response.json();
 }
 
-function adminActionMessage(action: string) {
-  if (action === "approve-technician") return "Partner approved and notified.";
+function adminActionMessage(action: string, result?: { reapproved?: boolean }) {
+  if (action === "approve-technician") return result?.reapproved ? "Partner approved again and notified." : "Partner approved and notified.";
   if (action === "reject-technician") return "Partner denied and notified.";
   if (action === "suspend-technician" || action === "block-technician") return "Partner blocked.";
   if (action === "delete-partner") return "Partner deleted from active admin records.";
   if (action === "delete-device") return "Device deleted and notifications disabled for that device.";
   return "Action completed.";
+}
+
+function partnerApprovalState(partner: ResourceRow) {
+  const verification = asText(partner.currentVerificationStatus || partner.approval).toLowerCase();
+  const kyc = asText(partner.kycStatus || partner.kyc).toLowerCase();
+  const account = asText(partner.accountStatus || partner.status).toLowerCase();
+  const trust = asText(partner.trustStatus || partner.trust).toLowerCase();
+  return {
+    approved: verification === "approved" || (kyc === "verified" && trust === "trusted" && account === "active"),
+    rejected: verification === "rejected" || verification === "denied" || kyc === "rejected",
+    blocked: verification === "blocked" || account === "blocked" || account === "suspended" || trust === "suspended",
+  };
 }
 
 async function fetchPartnerProfile(partnerId: string): Promise<PartnerProfilePayload> {
@@ -421,16 +433,18 @@ function DataTable({
                         onClick={() => onAdminAction("approve-technician", String(row.id))}
                       >
                         <CheckCircle2 size={14} />
-                        Approve
+                        {partnerApprovalState(row).rejected ? "Approve Again" : "Approve"}
                       </button>
-                      <button
-                        disabled={pendingAction === `${row.id}:reject-technician`}
-                        className="flex h-9 items-center gap-1 rounded-lg border border-[#ffd3dc] bg-white px-3 text-xs font-black text-[#d92d4b] disabled:opacity-60"
-                        onClick={() => onAdminAction("reject-technician", String(row.id))}
-                      >
-                        <XCircle size={14} />
-                        Deny
-                      </button>
+                      {!partnerApprovalState(row).rejected && (
+                        <button
+                          disabled={pendingAction === `${row.id}:reject-technician`}
+                          className="flex h-9 items-center gap-1 rounded-lg border border-[#ffd3dc] bg-white px-3 text-xs font-black text-[#d92d4b] disabled:opacity-60"
+                          onClick={() => onAdminAction("reject-technician", String(row.id))}
+                        >
+                          <XCircle size={14} />
+                          Deny
+                        </button>
+                      )}
                       <button
                         disabled={pendingAction === `${row.id}:delete-partner`}
                         className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd3dc] bg-white text-[#d92d4b] disabled:opacity-60"
@@ -532,6 +546,7 @@ function PartnerDetailPanel({
   });
 
   const partner = data?.partner || row;
+  const approvalState = partnerApprovalState(partner);
   const profilePhoto = asText(partner.profilePhoto);
   const docs = data?.documents || [];
   const verifiedDocumentCount = docs.filter((document) => document.validationStatus === "accepted").length + (profilePhoto !== "-" ? 1 : 0);
@@ -557,6 +572,9 @@ function PartnerDetailPanel({
     ["Languages Known", partner.languagesKnown],
     ["Registration Date", partner.registrationDate],
     ["Current Verification Status", partner.currentVerificationStatus],
+    ["Last Approved At", partner.approvedAt],
+    ["Last Rejected At", partner.rejectedAt],
+    ["Rejection Reason", partner.rejectionReason],
     ["Kyc Status", partner.kycStatus],
     ["Trust Status", partner.trustStatus],
     ["Account Status", partner.accountStatus],
@@ -584,19 +602,25 @@ function PartnerDetailPanel({
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />Approve Partner</button>
-              <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
-              <button
-                disabled={pendingAction === `${partnerId}:block-technician`}
-                onClick={() => {
-                  if (window.confirm("Block this partner from receiving bookings?")) {
-                    onAdminAction("block-technician", partnerId);
-                  }
-                }}
-                className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"
-              >
-                <XCircle size={15} />Block
-              </button>
+              {!approvalState.approved && (
+                <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />{approvalState.rejected ? "Approve Again" : approvalState.blocked ? "Restore & Approve" : "Approve Partner"}</button>
+              )}
+              {!approvalState.approved && !approvalState.rejected && !approvalState.blocked && (
+                <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
+              )}
+              {approvalState.approved && (
+                <button
+                  disabled={pendingAction === `${partnerId}:block-technician`}
+                  onClick={() => {
+                    if (window.confirm("Block this partner from receiving bookings?")) {
+                      onAdminAction("block-technician", partnerId);
+                    }
+                  }}
+                  className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"
+                >
+                  <XCircle size={15} />Block
+                </button>
+              )}
               <button
                 disabled={pendingAction === `${partnerId}:delete-partner`}
                 onClick={() => {
@@ -768,8 +792,8 @@ export function StandalonePartnerProfile({ partnerId }: { partnerId: string }) {
       setPendingAction(`${targetId}:${action}`);
       setActionMessage("");
     },
-    onSuccess: async (_result, variables) => {
-      setActionMessage(adminActionMessage(variables.action));
+    onSuccess: async (result, variables) => {
+      setActionMessage(adminActionMessage(variables.action, result));
       await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
       await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile-shell", partnerId] });
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partners"] });
@@ -883,8 +907,8 @@ export function ModulePage({ resource }: { resource: string }) {
       setPendingAction(`${targetId}:${action}`);
       setActionMessage("");
     },
-    onSuccess: async (_result, variables) => {
-      setActionMessage(adminActionMessage(variables.action));
+    onSuccess: async (result, variables) => {
+      setActionMessage(adminActionMessage(variables.action, result));
       setSelected(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", resource] });
     },
