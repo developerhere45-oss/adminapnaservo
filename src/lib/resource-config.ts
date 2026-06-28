@@ -11,6 +11,12 @@ export const resourceConfig: Record<string, { title: string; subtitle: string; p
     permission: "technicians:manage",
     action: "Export",
   },
+  devices: {
+    title: "Devices",
+    subtitle: "Dashboard > Devices",
+    permission: "technicians:manage",
+    action: "Export",
+  },
   "partner-approvals": {
     title: "Partner Approvals",
     subtitle: "Dashboard > Partner Approvals",

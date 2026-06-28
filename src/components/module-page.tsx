@@ -3,7 +3,6 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  Ban,
   CalendarCheck,
   CalendarDays,
   CheckCircle2,
@@ -23,6 +22,7 @@ import {
   Search,
   Settings,
   Star,
+  Trash2,
   UserRound,
   Users,
   WalletCards,
@@ -88,6 +88,15 @@ async function runAdminAction(action: string, targetId: string) {
   return response.json();
 }
 
+function adminActionMessage(action: string) {
+  if (action === "approve-technician") return "Partner approved and notified.";
+  if (action === "reject-technician") return "Partner denied and notified.";
+  if (action === "suspend-technician" || action === "block-technician") return "Partner blocked.";
+  if (action === "delete-partner") return "Partner deleted from active admin records.";
+  if (action === "delete-device") return "Device deleted and notifications disabled for that device.";
+  return "Action completed.";
+}
+
 async function fetchPartnerProfile(partnerId: string): Promise<PartnerProfilePayload> {
   const response = await fetch(`/api/admin/partners/${encodeURIComponent(partnerId)}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Partner profile unavailable");
@@ -101,29 +110,6 @@ async function updatePartnerDocument(partnerId: string, documentId: string, vali
     body: JSON.stringify({ validationStatus }),
   });
   if (!response.ok) throw new Error("Document update failed");
-  return response.json();
-}
-
-async function sendPartnerNotification(partnerId: string, message: string) {
-  const response = await fetch("/api/admin/notifications/send", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Idempotency-Key": `partner-message-${partnerId}-${Date.now()}`,
-    },
-    body: JSON.stringify({
-      targetType: "SPECIFIC_PARTNER",
-      recipientId: partnerId,
-      title: "Message from ApnaServo Admin",
-      message,
-      actionType: "OPEN_PARTNER_HOME",
-      actionId: "",
-    }),
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(typeof payload.message === "string" ? payload.message : "Message send failed");
-  }
   return response.json();
 }
 
@@ -178,34 +164,6 @@ function Status({ value }: { value: string }) {
   return <span className={cn("status-pill", statusStyle(value))}>{value || "-"}</span>;
 }
 
-function isPartnerBlocked(row: ResourceRow) {
-  const account = asText(row.accountStatus || row.status).toLowerCase();
-  const trust = asText(row.trustStatus || row.trust).toLowerCase();
-  const approval = asText(row.currentVerificationStatus || row.approval).toLowerCase();
-  return account.includes("blocked")
-    || account.includes("suspended")
-    || trust.includes("suspended")
-    || approval.includes("blocked");
-}
-
-function isPartnerApprovalPending(row: ResourceRow) {
-  if (isPartnerBlocked(row)) return false;
-  const approval = asText(row.currentVerificationStatus || row.approval).toLowerCase();
-  const kyc = asText(row.kycStatus || row.kyc).toLowerCase();
-  if (approval.includes("approved") || approval.includes("denied") || approval.includes("rejected")) return false;
-  return approval.includes("waiting")
-    || approval.includes("under")
-    || approval.includes("pending")
-    || ["missing", "submitted", "pending_review"].includes(kyc);
-}
-
-function adminActionMessage(action: string) {
-  if (action === "approve-technician") return "Partner approved and notified.";
-  if (action === "reject-technician") return "Partner denied and notified.";
-  if (action === "block-technician" || action === "suspend-technician") return "Partner blocked and notified.";
-  return "Admin action completed.";
-}
-
 function initials(value: unknown) {
   const words = asText(value).replace("-", "ApnaServo").split(/\s+/).filter(Boolean);
   return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join("") || "AS";
@@ -258,15 +216,11 @@ function copyText(value: unknown) {
   navigator.clipboard?.writeText(text).catch(() => undefined);
 }
 
-function fileNameForDocument(document: PartnerDocument) {
-  const baseName = document.originalName || documentLabel(document.documentType);
-  return baseName.replace(/[^\w.-]+/g, "_") || "partner-document";
-}
-
 function columnsFor(resource: string, rows: ResourceRow[]) {
   const known: Record<string, string[]> = {
     bookings: ["bookingCode", "userName", "userMobile", "serviceName", "partnerName", "bookingDateTime", "scheduledDateTime", "status", "finalServiceCost", "paymentStatus"],
     partners: ["code", "name", "phone", "services", "city", "online", "totalBookings", "rating", "kyc", "trust", "status"],
+    devices: ["ownerType", "ownerName", "mobileNumber", "platform", "appType", "deviceId", "status", "lastUpdatedAt"],
     "partner-approvals": ["code", "name", "phone", "services", "city", "approval", "kyc", "trust", "joinedAt"],
     payments: ["bookingCode", "userName", "partnerName", "amount", "currency", "status", "razorpayPaymentId", "createdAt"],
     reports: ["reportType", "currentValue"],
@@ -460,8 +414,7 @@ function DataTable({
                 })}
                 <td className="px-5 py-3">
                   {resource === "partner-approvals" && row.id ? (
-                    isPartnerApprovalPending(row) ? (
-                    <div className="flex min-w-[180px] gap-2" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex min-w-[240px] gap-2" onClick={(event) => event.stopPropagation()}>
                       <button
                         disabled={pendingAction === `${row.id}:approve-technician`}
                         className="flex h-9 items-center gap-1 rounded-lg bg-[#079455] px-3 text-xs font-black text-white disabled:opacity-60"
@@ -478,26 +431,65 @@ function DataTable({
                         <XCircle size={14} />
                         Deny
                       </button>
+                      <button
+                        disabled={pendingAction === `${row.id}:delete-partner`}
+                        className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd3dc] bg-white text-[#d92d4b] disabled:opacity-60"
+                        aria-label="Delete partner"
+                        onClick={() => {
+                          if (window.confirm("Delete this partner from active admin records? This will disable partner login notifications and receiving bookings.")) {
+                            onAdminAction("delete-partner", String(row.id));
+                          }
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                    ) : (
-                      <span className="text-xs font-black text-[#667085]">Decision complete</span>
-                    )
+                  ) : resource === "partners" && row.id ? (
+                    <div className="flex min-w-[150px] gap-2" onClick={(event) => event.stopPropagation()}>
+                      <button className="grid h-9 w-10 place-items-center rounded-lg border border-[#e6eaf2]" onClick={() => onSelect(row)} aria-label="View partner"><Eye size={16} /></button>
+                      <button
+                        disabled={pendingAction === `${row.id}:block-technician`}
+                        className="grid h-9 w-10 place-items-center rounded-lg border border-[#ffd3dc] bg-white text-[#d92d4b] disabled:opacity-60"
+                        aria-label="Block partner"
+                        onClick={() => {
+                          if (window.confirm("Block this partner from receiving bookings?")) {
+                            onAdminAction("block-technician", String(row.id));
+                          }
+                        }}
+                      >
+                        <XCircle size={15} />
+                      </button>
+                      <button
+                        disabled={pendingAction === `${row.id}:delete-partner`}
+                        className="grid h-9 w-10 place-items-center rounded-lg border border-[#ffd3dc] bg-white text-[#d92d4b] disabled:opacity-60"
+                        aria-label="Delete partner"
+                        onClick={() => {
+                          if (window.confirm("Delete this partner from active admin records? Active bookings must be completed or reassigned first.")) {
+                            onAdminAction("delete-partner", String(row.id));
+                          }
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ) : resource === "devices" && row.id ? (
+                    <div className="flex min-w-[100px] gap-2" onClick={(event) => event.stopPropagation()}>
+                      <button className="grid h-9 w-10 place-items-center rounded-lg border border-[#e6eaf2]" onClick={() => onSelect(row)} aria-label="View device"><Eye size={16} /></button>
+                      <button
+                        disabled={pendingAction === `${row.id}:delete-device`}
+                        className="grid h-9 w-10 place-items-center rounded-lg border border-[#ffd3dc] bg-white text-[#d92d4b] disabled:opacity-60"
+                        aria-label="Delete device"
+                        onClick={() => {
+                          if (window.confirm("Delete this device token? Push notifications will stop for this device.")) {
+                            onAdminAction("delete-device", String(row.id));
+                          }
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   ) : resource === "bookings" && row.id ? (
                     <Link href={`/bookings/${encodeURIComponent(String(row.id))}`} className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => event.stopPropagation()}><Eye size={16} /></Link>
-                  ) : resource === "partners" && row.id ? (
-                    <div className="flex min-w-[130px] gap-2" onClick={(event) => event.stopPropagation()}>
-                      <button className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => { event.stopPropagation(); onSelect(row); }}><Eye size={16} /></button>
-                      {!isPartnerBlocked(row) && (
-                        <button
-                          disabled={pendingAction === `${row.id}:block-technician`}
-                          className="grid h-9 w-12 place-items-center rounded-lg border border-[#ffd3dc] bg-[#fff7f9] text-[#d92d4b] disabled:opacity-60"
-                          onClick={() => onAdminAction("block-technician", String(row.id))}
-                          title="Block partner"
-                        >
-                          <Ban size={16} />
-                        </button>
-                      )}
-                    </div>
                   ) : (
                     <button className="grid h-9 w-12 place-items-center rounded-lg border border-[#e6eaf2]" onClick={(event) => { event.stopPropagation(); onSelect(row); }}><Eye size={16} /></button>
                   )}
@@ -525,7 +517,6 @@ function PartnerDetailPanel({
 }) {
   const partnerId = String(row.id || "");
   const queryClient = useQueryClient();
-  const [quickActionMessage, setQuickActionMessage] = useState("");
   const { data, isLoading, isError } = useQuery({
     queryKey: ["admin-partner-profile", partnerId],
     queryFn: () => fetchPartnerProfile(partnerId),
@@ -539,22 +530,8 @@ function PartnerDetailPanel({
       await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
     },
   });
-  const messageMutation = useMutation({
-    mutationFn: (message: string) => sendPartnerNotification(partnerId, message),
-    onMutate: () => setQuickActionMessage(""),
-    onSuccess: () => setQuickActionMessage("Message sent to partner."),
-    onError: (error) => setQuickActionMessage(error instanceof Error ? error.message : "Message send failed."),
-  });
-
-  function handleSendMessage() {
-    const message = window.prompt("Message to partner", "Please keep your device online to receive bookings from ApnaServo.");
-    if (!message?.trim()) return;
-    messageMutation.mutate(message.trim());
-  }
 
   const partner = data?.partner || row;
-  const pendingDecision = isPartnerApprovalPending(partner);
-  const blockedPartner = isPartnerBlocked(partner);
   const profilePhoto = asText(partner.profilePhoto);
   const docs = data?.documents || [];
   const verifiedDocumentCount = docs.filter((document) => document.validationStatus === "accepted").length + (profilePhoto !== "-" ? 1 : 0);
@@ -607,16 +584,30 @@ function PartnerDetailPanel({
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {pendingDecision && (
-                <>
-                  <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />Approve Partner</button>
-                  <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
-                </>
-              )}
-              {!blockedPartner && (
-                <button disabled={pendingAction === `${partnerId}:block-technician`} onClick={() => onAdminAction("block-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-[#fff7f9] px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><Ban size={15} />Block Partner</button>
-              )}
-              {!pendingDecision && blockedPartner && <Status value="Blocked" />}
+              <button disabled={pendingAction === `${partnerId}:approve-technician`} onClick={() => onAdminAction("approve-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><CheckCircle2 size={15} />Approve Partner</button>
+              <button disabled={pendingAction === `${partnerId}:reject-technician`} onClick={() => onAdminAction("reject-technician", partnerId)} className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"><XCircle size={15} />Reject Partner</button>
+              <button
+                disabled={pendingAction === `${partnerId}:block-technician`}
+                onClick={() => {
+                  if (window.confirm("Block this partner from receiving bookings?")) {
+                    onAdminAction("block-technician", partnerId);
+                  }
+                }}
+                className="flex h-10 items-center gap-2 rounded-lg border border-[#ffd3dc] bg-white px-4 text-xs font-black text-[#d92d4b] disabled:opacity-60"
+              >
+                <XCircle size={15} />Block
+              </button>
+              <button
+                disabled={pendingAction === `${partnerId}:delete-partner`}
+                onClick={() => {
+                  if (window.confirm("Delete this partner from active admin records? Active bookings must be completed or reassigned first.")) {
+                    onAdminAction("delete-partner", partnerId);
+                  }
+                }}
+                className="flex h-10 items-center gap-2 rounded-lg bg-[#d92d4b] px-4 text-xs font-black text-white disabled:opacity-60"
+              >
+                <Trash2 size={15} />Delete
+              </button>
             </div>
           </div>
         </div>
@@ -629,7 +620,7 @@ function PartnerDetailPanel({
         {isError && <div className="m-4 rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">Full live profile unavailable.</div>}
         {isLoading && <div className="m-4 rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">Loading complete profile...</div>}
 
-        <div className="grid min-w-0 gap-4 p-4">
+        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_320px]">
           <section className="rounded-lg border border-[#edf0f6]">
             <div className="flex items-center gap-2 border-b border-[#edf0f6] px-4 py-3">
               <UserRound size={16} className="text-[#079455]" />
@@ -637,9 +628,9 @@ function PartnerDetailPanel({
             </div>
             <div className="divide-y divide-[#edf0f6] text-sm">
               {detailRows.map(([label, value]) => (
-                <div key={String(label)} className="grid min-w-0 grid-cols-[145px_minmax(0,1fr)] gap-3 px-4 py-3">
+                <div key={String(label)} className="grid grid-cols-[155px_1fr] gap-3 px-4 py-3">
                   <span className="font-semibold text-[#667085]">{label}</span>
-                  <span className="min-w-0 break-words font-black text-[#111827]">{formatValue(String(label), value)}</span>
+                  <span className="break-words font-black text-[#111827]">{formatValue(String(label), value)}</span>
                 </div>
               ))}
             </div>
@@ -658,7 +649,7 @@ function PartnerDetailPanel({
                 <p className="rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">No profile photo or documents uploaded yet.</p>
               ) : visibleDocs.map((document) => (
                 <div key={document.id} className="flex gap-3 rounded-lg border border-[#edf0f6] p-2">
-                  <a href={document.url || "#"} target="_blank" rel="noreferrer" className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f8fbff]">
+                  <a href={document.url || "#"} target="_blank" className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f8fbff]">
                     {document.url && (document.mimeType?.startsWith("image/") || document.url.startsWith("data:image/")) ? (
                       <img src={document.url} alt={documentLabel(document.documentType)} className="h-full w-full object-cover" />
                     ) : <FileText size={22} className="text-[#667085]" />}
@@ -666,7 +657,7 @@ function PartnerDetailPanel({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-black text-[#111827]">{documentLabel(document.documentType)}</p>
                     <Status value={document.validationStatus === "accepted" ? "Verified" : document.validationStatus} />
-                    {document.url ? <a href={document.url} target="_blank" rel="noreferrer" className="mt-1 block text-xs font-black text-[#0b6df6]">View</a> : <p className="mt-1 text-xs font-bold text-[#d92d4b]">Missing file URL</p>}
+                    {document.url ? <a href={document.url} target="_blank" className="mt-1 block text-xs font-black text-[#0b6df6]">View</a> : <p className="mt-1 text-xs font-bold text-[#d92d4b]">Missing file URL</p>}
                     {document.id !== "profile-photo" && (
                       <div className="mt-2 flex gap-2">
                         <button onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })} className="rounded-md bg-[#e8f8ef] px-2 py-1 text-[11px] font-black text-[#079455]">Verify</button>
@@ -674,18 +665,7 @@ function PartnerDetailPanel({
                       </div>
                     )}
                   </div>
-                  {document.url ? (
-                    <a
-                      href={`/api/admin/partners/${encodeURIComponent(partnerId)}/documents/${encodeURIComponent(document.id)}`}
-                      download={fileNameForDocument(document)}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Download document"
-                      className="grid h-9 w-9 place-items-center rounded-lg border border-[#d7f2e2] text-[#079455]"
-                    >
-                      <Download size={15} />
-                    </a>
-                  ) : null}
+                  {document.url ? <a href={document.url} target="_blank" className="grid h-9 w-9 place-items-center rounded-lg border border-[#d7f2e2] text-[#079455]"><Download size={15} /></a> : null}
                 </div>
               ))}
             </div>
@@ -696,41 +676,22 @@ function PartnerDetailPanel({
             <p className="mt-3 rounded-lg bg-[#f8fbff] p-3 text-sm font-semibold text-[#475467]">
               {asText(partner.fullName || row.name)} is registered for {formatValue("services", partner.professionServiceCategory || row.services)} with {formatValue("yearsOfExperience", partner.yearsOfExperience || 0)} years of experience.
             </p>
-            <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 text-xs">
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
               <div className="rounded-lg border border-[#edf0f6] p-3"><Clock3 size={15} className="mb-2 text-[#667085]" /><b>{asText(partner.yearsOfExperience || 0)}</b><br />Years Exp.</div>
               <div className="rounded-lg border border-[#edf0f6] p-3"><Wrench size={15} className="mb-2 text-[#667085]" /><b>{formatValue("services", partner.professionServiceCategory || row.services)}</b><br />Specialization</div>
               <div className="rounded-lg border border-[#edf0f6] p-3"><MapPin size={15} className="mb-2 text-[#667085]" /><b>{asText(partner.city || row.city)}</b><br />Service Area</div>
             </div>
           </section>
 
-          <section className="grid min-w-0 gap-4">
+          <section className="grid gap-4 xl:grid-cols-1">
             <div className="rounded-lg border border-[#edf0f6] p-4">
               <h3 className="text-sm font-black">Verification Notes</h3>
               <p className="mt-3 rounded-lg bg-[#effbf4] p-3 text-xs font-bold text-[#079455]">All documents and profile photo are fetched from the live backend. Verified documents: {verifiedDocumentCount}.</p>
             </div>
             <div className="rounded-lg border border-[#edf0f6] p-4">
               <h3 className="text-sm font-black">Quick Actions</h3>
-              <button
-                type="button"
-                onClick={handleSendMessage}
-                disabled={messageMutation.isPending || !partnerId}
-                className="mt-3 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black disabled:opacity-60"
-              >
-                <span className="inline-flex items-center gap-2"><MessageSquare size={15} />Send Message</span>
-                <span>{messageMutation.isPending ? "Sending" : ">"}</span>
-              </button>
-              <Link
-                href={`/partners/${encodeURIComponent(partnerId)}`}
-                className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black"
-              >
-                <span className="inline-flex items-center gap-2"><UserRound size={15} />View Partner Profile</span>
-                <span>{">"}</span>
-              </Link>
-              {quickActionMessage ? (
-                <p className={cn("mt-3 rounded-lg p-3 text-xs font-bold", quickActionMessage.includes("failed") ? "bg-[#fff7f9] text-[#d92d4b]" : "bg-[#effbf4] text-[#079455]")}>
-                  {quickActionMessage}
-                </p>
-              ) : null}
+              <Link href={`/notifications?target=partner&partnerId=${encodeURIComponent(partnerId)}`} className="mt-3 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black hover:bg-[#f8fbff]"><span className="inline-flex items-center gap-2"><MessageSquare size={15} />Send Message</span><span>&gt;</span></Link>
+              <Link href={`/partners/${encodeURIComponent(partnerId)}`} className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black hover:bg-[#f8fbff]"><span className="inline-flex items-center gap-2"><UserRound size={15} />View Partner Profile</span><span>&gt;</span></Link>
             </div>
           </section>
         </div>
@@ -777,6 +738,76 @@ function DetailPanel({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+export function StandalonePartnerProfile({ partnerId }: { partnerId: string }) {
+  const [actionMessage, setActionMessage] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
+  const queryClient = useQueryClient();
+  const profileQuery = useQuery({
+    queryKey: ["admin-partner-profile-shell", partnerId],
+    queryFn: () => fetchPartnerProfile(partnerId),
+    enabled: Boolean(partnerId),
+  });
+  const row = useMemo<ResourceRow>(() => {
+    const partner = profileQuery.data?.partner || {};
+    return {
+      ...partner,
+      id: partnerId,
+      name: partner.fullName || partner.name || "Partner",
+      services: partner.professionServiceCategory || partner.services,
+      city: partner.city || partner.serviceArea,
+      status: partner.verificationStatus || partner.accountStatus,
+    };
+  }, [partnerId, profileQuery.data]);
+  const actionMutation = useMutation({
+    mutationFn: ({ action, targetId }: { action: string; targetId: string }) => runAdminAction(action, targetId),
+    onMutate: ({ action, targetId }) => {
+      setPendingAction(`${targetId}:${action}`);
+      setActionMessage("");
+    },
+    onSuccess: async (_result, variables) => {
+      setActionMessage(adminActionMessage(variables.action));
+      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile-shell", partnerId] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partners"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partner-approvals"] });
+    },
+    onError: (error) => {
+      setActionMessage(error instanceof Error ? error.message : "Action failed");
+    },
+    onSettled: () => setPendingAction(""),
+  });
+
+  return (
+    <div>
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <div>
+          <Link href="/partners" className="text-xs font-black text-[#0b6df6]">&lt; Back to Partners</Link>
+          <h1 className="mt-3 text-[28px] font-black text-[#111827]">Partner Verification</h1>
+          <p className="mt-1 text-sm font-semibold text-[#667085]">Live partner profile, documents, actions and verification state.</p>
+        </div>
+        <button onClick={() => profileQuery.refetch()} className="flex h-10 items-center gap-2 rounded-lg border border-[#e6eaf2] bg-white px-4 text-sm font-black text-[#17233c]">
+          <RefreshCw size={16} /> Refresh
+        </button>
+      </div>
+      {profileQuery.isError && <div className="admin-card mb-5 border-[#ffd3dc] bg-[#fff7f9] p-4 text-sm font-bold text-[#d92d4b]">Partner profile unavailable from live backend.</div>}
+      {actionMessage && (
+        <div className={cn("admin-card mb-5 p-4 text-sm font-bold", actionMessage.includes("failed") || actionMessage.includes("unavailable") ? "border-[#ffd3dc] bg-[#fff7f9] text-[#d92d4b]" : "border-[#c7f0d8] bg-[#f3fff7] text-[#079455]")}>
+          {actionMessage}
+        </div>
+      )}
+      {profileQuery.isLoading ? (
+        <div className="admin-card p-8 text-sm font-bold text-[#667085]">Loading complete partner profile...</div>
+      ) : (
+        <PartnerDetailPanel
+          row={row}
+          onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+          pendingAction={pendingAction}
+        />
+      )}
     </div>
   );
 }
@@ -835,47 +866,6 @@ function LogoutPage() {
   );
 }
 
-export function StandalonePartnerProfile({ partnerId }: { partnerId: string }) {
-  const [actionMessage, setActionMessage] = useState("");
-  const [pendingAction, setPendingAction] = useState("");
-  const queryClient = useQueryClient();
-  const actionMutation = useMutation({
-    mutationFn: ({ action, targetId }: { action: string; targetId: string }) => runAdminAction(action, targetId),
-    onMutate: ({ action, targetId }) => {
-      setPendingAction(`${targetId}:${action}`);
-      setActionMessage("");
-    },
-    onSuccess: async (_result, variables) => {
-      setActionMessage(adminActionMessage(variables.action));
-      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile", partnerId] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partners"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partner-approvals"] });
-    },
-    onError: (error) => {
-      setActionMessage(error instanceof Error ? error.message : "Admin action failed.");
-    },
-    onSettled: () => setPendingAction(""),
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/partners" className="text-sm font-black text-[#0b6df6]">Back to Partners</Link>
-        {actionMessage ? (
-          <span className={cn("rounded-lg px-3 py-2 text-xs font-bold", actionMessage.includes("failed") ? "bg-[#fff7f9] text-[#d92d4b]" : "bg-[#eef5ff] text-[#0b6df6]")}>
-            {actionMessage}
-          </span>
-        ) : null}
-      </div>
-      <PartnerDetailPanel
-        row={{ id: partnerId }}
-        pendingAction={pendingAction}
-        onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
-      />
-    </div>
-  );
-}
-
 export function ModulePage({ resource }: { resource: string }) {
   const [selected, setSelected] = useState<ResourceRow | null>(null);
   const [actionMessage, setActionMessage] = useState("");
@@ -897,7 +887,6 @@ export function ModulePage({ resource }: { resource: string }) {
       setActionMessage(adminActionMessage(variables.action));
       setSelected(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", resource] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile"] });
     },
     onError: (error) => {
       setActionMessage(error instanceof Error ? error.message : "Action failed");
