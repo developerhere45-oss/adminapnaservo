@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowRight,
   CalendarCheck,
   CalendarDays,
   CheckCircle2,
   Clock3,
   Clipboard,
+  ClipboardList,
   Copy,
   Download,
   Eye,
   FileText,
   Filter,
+  Headphones,
   IndianRupee,
   LogOut,
   MapPin,
@@ -29,7 +33,7 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { resourceConfig } from "@/lib/resource-config";
 import { cn } from "@/lib/utils";
@@ -202,6 +206,73 @@ function documentLabel(type: string) {
   return labels[type] || titleFromKey(type || "Document");
 }
 
+function normalizedStatus(row: ResourceRow) {
+  return asText(row.accountStatus || row.status || row.approval).toLowerCase();
+}
+
+function filterRowsByMetric(resource: string, rows: ResourceRow[], metric: string) {
+  if (!metric) return rows;
+
+  if (resource === "partners") {
+    return rows.filter((row) => {
+      const status = normalizedStatus(row);
+      const approval = asText(row.approval || row.currentVerificationStatus).toLowerCase();
+      const kyc = asText(row.kyc || row.kycStatus).toLowerCase();
+      const trust = asText(row.trust || row.trustStatus).toLowerCase();
+      const deleted = status === "deleted";
+      if (metric === "totalPartners") return !deleted;
+      if (metric === "activePartners") return !deleted && status === "active" && trust !== "suspended";
+      if (metric === "pendingApproval") return !deleted && ["missing", "submitted", "pending_review"].includes(kyc);
+      if (metric === "blockedOrSuspended") return !deleted && (approval === "blocked" || status === "blocked" || status === "suspended" || trust === "suspended");
+      if (metric === "deletedPartners") return deleted;
+      return !deleted;
+    });
+  }
+
+  if (resource === "partner-approvals") {
+    return rows.filter((row) => {
+      const kyc = asText(row.kyc || row.kycStatus).toLowerCase();
+      if (metric === "pendingApproval") return ["missing", "submitted", "pending_review"].includes(kyc);
+      if (metric === "submitted") return kyc === "submitted";
+      if (metric === "pendingReview") return kyc === "pending_review";
+      if (metric === "rejected") return kyc === "rejected";
+      if (metric === "verified") return kyc === "verified";
+      return true;
+    });
+  }
+
+  if (resource === "bookings") {
+    return rows.filter((row) => {
+      const status = normalizedStatus(row);
+      if (metric === "completed" || metric === "totalRevenue" || metric === "avgOrderValue") return status === "completed";
+      if (metric === "pending") return ["pending", "sent_to_partner", "amount_pending", "searching"].includes(status);
+      if (metric === "cancelled") return ["cancelled", "canceled"].includes(status);
+      return true;
+    });
+  }
+
+  if (resource === "devices") {
+    if (metric === "userDevices") return rows.filter((row) => asText(row.ownerType).toLowerCase() === "user");
+    if (metric === "partnerDevices") return rows.filter((row) => asText(row.ownerType).toLowerCase() === "partner");
+    if (metric === "activeDevices") return rows.filter((row) => row.active === true || normalizedStatus(row) === "active");
+  }
+
+  if (resource === "users" && metric === "activeUsers") {
+    return rows.filter((row) => normalizedStatus(row) === "active");
+  }
+
+  if (resource === "payments") {
+    if (metric === "pendingPayments" || metric === "overduePayments") {
+      return rows.filter((row) => ["created", "pending", "failed", "overdue"].includes(normalizedStatus(row)));
+    }
+    if (["totalPlatformRevenue", "totalPartnerEarnings", "totalCollection"].includes(metric)) {
+      return rows.filter((row) => ["paid", "success", "completed"].includes(normalizedStatus(row)));
+    }
+  }
+
+  return rows;
+}
+
 function assetUrl(...values: unknown[]) {
   for (const value of values) {
     const text = asText(value).trim();
@@ -308,19 +379,30 @@ function PageHeader({ resource, isFetching, onRefresh, onExport }: { resource: s
   );
 }
 
-function MetricCard({ label, value, index }: { label: string; value: unknown; index: number }) {
+function MetricCard({ label, value, index, active, onClick }: { label: string; value: unknown; index: number; active: boolean; onClick: () => void }) {
   const Icon = metricIcons[index % metricIcons.length];
   return (
-    <div className="admin-card p-5">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "admin-card group min-h-[148px] w-full p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#a8c7ff] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0b6df6]",
+        active && "border-[#0b6df6] bg-[#f7faff] shadow-[0_0_0_2px_rgba(11,109,246,0.10)]",
+      )}
+    >
       <div className="flex items-center gap-4">
         <div className={cn("metric-icon", metricTones[index % metricTones.length])}><Icon size={25} /></div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-[#475467]">{titleFromKey(label)}</p>
           <p className="mt-1 text-2xl font-black">{formatValue(label, value)}</p>
-          <p className="mt-2 text-xs font-bold text-[#079455]">Live database</p>
+          <p className="mt-2 flex items-center justify-between gap-2 text-xs font-bold text-[#079455]">
+            <span>Live database</span>
+            <ArrowRight size={14} className="text-[#0b6df6] transition-transform group-hover:translate-x-0.5" />
+          </p>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -851,39 +933,70 @@ function PartnerDetailPanel({
             </div>
           </section>
           {activePartnerTab === "History" && (
-            <section className="grid gap-4 xl:col-span-2 xl:grid-cols-2">
-              <div className="rounded-lg border border-[#edf0f6] p-4">
-                <h3 className="text-sm font-black">Booking History</h3>
-                <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
-                  {(data?.bookingHistory || []).length === 0 ? (
-                    <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No booking history found for this partner.</p>
-                  ) : (data?.bookingHistory || []).map((booking) => (
-                    <div key={String(booking.id)} className="rounded-lg border border-[#edf0f6] p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-black text-[#0b6df6]">{asText(booking.bookingCode || booking.id)}</p>
-                        <Status value={asText(booking.status || booking.bookingStatus)} />
-                      </div>
-                      <p className="mt-1 text-sm font-black text-[#111827]">{asText(booking.serviceName || booking.serviceCategory || booking.service)}</p>
-                      <p className="mt-1 text-xs font-semibold text-[#667085]">Customer: {asText(booking.customerName || booking.customer)} - Amount: Rs {asText(booking.finalAmount || booking.amount || 0)}</p>
-                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(booking.createdAt)}</p>
-                    </div>
-                  ))}
+            <section className="grid gap-5 xl:col-span-2 xl:grid-cols-[1.25fr_0.75fr]">
+              <div className="overflow-hidden rounded-lg border border-[#e6eaf2] bg-white shadow-sm">
+                <div className="flex items-center gap-3 border-b border-[#edf0f6] px-5 py-4">
+                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#eef5ff] text-[#0b6df6]"><CalendarDays size={18} /></span>
+                  <div>
+                    <h3 className="text-base font-black text-[#111827]">Booking History</h3>
+                    <p className="mt-0.5 text-xs font-semibold text-[#667085]">All bookings assigned to this partner</p>
+                  </div>
                 </div>
+                <div className="max-h-[560px] overflow-auto p-4">
+                  {(data?.bookingHistory || []).length === 0 ? (
+                    <div className="grid min-h-[260px] place-items-center rounded-lg bg-[#f8fbff] p-8 text-center">
+                      <div><ClipboardList className="mx-auto text-[#98a2b3]" size={42} /><p className="mt-4 text-sm font-black text-[#344054]">No booking history found</p><p className="mt-1 text-xs font-semibold text-[#667085]">Assigned bookings will appear here.</p></div>
+                    </div>
+                  ) : (
+                    <table className="w-full min-w-[680px] text-left text-xs">
+                      <thead className="bg-[#f8fbff] text-[#667085]">
+                        <tr>
+                          {['Booking ID', 'Service', 'Customer', 'Date & Time', 'Amount', 'Status'].map((heading) => <th key={heading} className="px-3 py-3 font-black">{heading}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(data?.bookingHistory || []).map((booking) => (
+                          <tr key={String(booking.id)} className="border-t border-[#edf0f6] hover:bg-[#fbfdff]">
+                            <td className="px-3 py-4"><Link href={`/bookings/${encodeURIComponent(asText(booking.id))}`} className="font-black text-[#0b6df6] hover:underline">{asText(booking.bookingCode || booking.id)}</Link></td>
+                            <td className="px-3 py-4"><span className="inline-flex items-center gap-2 font-bold text-[#263149]"><Wrench size={14} className="text-[#667085]" />{asText(booking.serviceName || booking.serviceCategory || booking.service)}</span></td>
+                            <td className="px-3 py-4 font-semibold text-[#344054]">{asText(booking.customerName || booking.customer || booking.userName)}</td>
+                            <td className="px-3 py-4 font-semibold text-[#344054]"><span className="block">{shortDate(booking.createdAt || booking.bookingDateTime)}</span><span className="mt-1 block text-[#667085]">{shortTime(booking.createdAt || booking.bookingDateTime)}</span></td>
+                            <td className="px-3 py-4 font-black text-[#111827]">{formatMoney(booking.finalAmount || booking.finalServiceCost || booking.amount)}</td>
+                            <td className="px-3 py-4"><Status value={asText(booking.status || booking.bookingStatus)} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <Link href="/bookings" className="flex items-center gap-2 border-t border-[#edf0f6] px-5 py-4 text-xs font-black text-[#0b6df6] hover:bg-[#f8fbff]">View all bookings <ArrowRight size={14} /></Link>
               </div>
-              <div className="rounded-lg border border-[#edf0f6] p-4">
-                <h3 className="text-sm font-black">Support Ticket History</h3>
-                <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
+              <div className="overflow-hidden rounded-lg border border-[#e6eaf2] bg-white shadow-sm">
+                <div className="flex items-center gap-3 border-b border-[#edf0f6] px-5 py-4">
+                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#eef5ff] text-[#0b6df6]"><Headphones size={18} /></span>
+                  <div>
+                    <h3 className="text-base font-black text-[#111827]">Support Ticket History</h3>
+                    <p className="mt-0.5 text-xs font-semibold text-[#667085]">Complaints and support requests</p>
+                  </div>
+                </div>
+                <div className="max-h-[560px] space-y-3 overflow-y-auto p-4">
                   {(data?.supportTickets || []).length === 0 ? (
-                    <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No support tickets found for this partner.</p>
+                    <div className="grid min-h-[360px] place-items-center rounded-lg bg-[#fbfcff] p-8 text-center">
+                      <div>
+                        <span className="mx-auto grid h-24 w-24 place-items-center rounded-full bg-[#f0f3f9] text-[#98a2b3]"><ClipboardList size={42} /></span>
+                        <p className="mt-5 text-base font-black text-[#111827]">No support tickets found</p>
+                        <p className="mx-auto mt-2 max-w-[230px] text-sm font-semibold leading-6 text-[#667085]">Tickets will appear here when this partner raises a request.</p>
+                      </div>
+                    </div>
                   ) : (data?.supportTickets || []).map((ticket) => (
-                    <div key={String(ticket.id)} className="rounded-lg border border-[#edf0f6] p-3">
+                    <Link href={`/users/support/${encodeURIComponent(asText(ticket.id))}`} key={String(ticket.id)} className="block rounded-lg border border-[#edf0f6] p-4 transition hover:border-[#bfd5ff] hover:bg-[#f8fbff]">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-black text-[#111827]">{asText(ticket.title || ticket.category)}</p>
                         <Status value={asText(ticket.status)} />
                       </div>
                       <p className="mt-1 text-xs font-semibold text-[#667085]">{asText(ticket.message || ticket.body)}</p>
                       <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(ticket.createdAt)}</p>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -1082,8 +1195,10 @@ function LogoutPage() {
 
 export function ModulePage({ resource }: { resource: string }) {
   const [selected, setSelected] = useState<ResourceRow | null>(null);
+  const [metricFilter, setMetricFilter] = useState(resource === "partners" ? "totalPartners" : "");
   const [actionMessage, setActionMessage] = useState("");
   const [pendingAction, setPendingAction] = useState("");
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["admin-resource", resource],
@@ -1108,12 +1223,37 @@ export function ModulePage({ resource }: { resource: string }) {
     onSettled: () => setPendingAction(""),
   });
 
+  useEffect(() => {
+    setMetricFilter(resource === "partners" ? "totalPartners" : "");
+    setSelected(null);
+  }, [resource]);
+
   if (resource === "settings") return <SettingsPage />;
   if (resource === "logout") return <LogoutPage />;
 
   const rows = data?.rows || [];
-  const selectedRow = selected && rows.some((row) => row.id === selected.id) ? selected : rows[0] || null;
+  const visibleRows = filterRowsByMetric(resource, rows, metricFilter);
+  const usesStandalonePartnerProfile = resource === "partners" || resource === "partner-approvals";
+  const selectedRow = selected && visibleRows.some((row) => row.id === selected.id) ? selected : usesStandalonePartnerProfile ? null : visibleRows[0] || null;
   const metrics = Object.entries(data?.metrics || {});
+
+  const handleMetricClick = (label: string) => {
+    if (resource === "partners" && label === "totalBookings") {
+      router.push("/bookings");
+      return;
+    }
+    const defaultMetric = resource === "partners" ? "totalPartners" : "";
+    setMetricFilter((current) => current === label ? defaultMetric : label);
+    setSelected(null);
+  };
+
+  const handleRowSelect = (row: ResourceRow) => {
+    if (usesStandalonePartnerProfile && row.id) {
+      router.push(`/partners/${encodeURIComponent(String(row.id))}`);
+      return;
+    }
+    setSelected(row);
+  };
 
   return (
     <div>
@@ -1128,29 +1268,40 @@ export function ModulePage({ resource }: { resource: string }) {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {metrics.length === 0 ? (
           <div className="admin-card p-5 text-sm font-semibold text-[#667085]">No live metrics returned.</div>
-        ) : metrics.map(([label, value], index) => <MetricCard key={label} label={label} value={value} index={index} />)}
+        ) : metrics.map(([label, value], index) => (
+          <MetricCard
+            key={label}
+            label={label}
+            value={value}
+            index={index}
+            active={metricFilter === label}
+            onClick={() => handleMetricClick(label)}
+          />
+        ))}
       </section>
 
       {resource === "bookings" ? (
         <section className="mt-5">
-          <BookingOperationsTable rows={rows} />
+          <BookingOperationsTable rows={visibleRows} />
         </section>
       ) : (
-        <section className="mt-5 grid gap-5 2xl:grid-cols-[1fr_430px]">
+        <section className={cn("mt-5 gap-5", usesStandalonePartnerProfile ? "block" : "grid 2xl:grid-cols-[1fr_430px]")}>
           <DataTable
             resource={resource}
-            rows={rows}
+            rows={visibleRows}
             selectedId={asText(selectedRow?.id)}
-            onSelect={setSelected}
+            onSelect={handleRowSelect}
             onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
             pendingAction={pendingAction}
           />
-          <DetailPanel
-            resource={resource}
-            row={selectedRow}
-            onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
-            pendingAction={pendingAction}
-          />
+          {!usesStandalonePartnerProfile && (
+            <DetailPanel
+              resource={resource}
+              row={selectedRow}
+              onAdminAction={(action, targetId) => actionMutation.mutate({ action, targetId })}
+              pendingAction={pendingAction}
+            />
+          )}
         </section>
       )}
     </div>
