@@ -57,7 +57,9 @@ type PartnerProfilePayload = {
   documents: PartnerDocument[];
   supportTickets: ResourceRow[];
   bookingHistory: ResourceRow[];
+  activityHistory: ResourceRow[];
 };
+type PartnerDetailTab = "Overview" | "Documents" | "History" | "Activity";
 
 const metricIcons = [Users, CheckCircle2, Clock3, XCircle, CalendarCheck, IndianRupee, WalletCards, AlertTriangle, Star];
 const metricTones = [
@@ -198,6 +200,48 @@ function documentLabel(type: string) {
     other_supporting_document: "Supporting Document",
   };
   return labels[type] || titleFromKey(type || "Document");
+}
+
+function assetUrl(...values: unknown[]) {
+  for (const value of values) {
+    const text = asText(value).trim();
+    if (text && text !== "-" && (/^https?:\/\//i.test(text) || /^data:image\//i.test(text))) return text;
+  }
+  return "";
+}
+
+function isImageDocument(document: PartnerDocument) {
+  return Boolean(document.url) && (
+    document.mimeType?.startsWith("image/")
+    || document.url.startsWith("data:image/")
+    || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(document.url)
+  );
+}
+
+function documentFileName(document: PartnerDocument) {
+  const extension = document.mimeType?.includes("png") ? ".png" : document.mimeType?.includes("jpeg") || document.mimeType?.includes("jpg") ? ".jpg" : "";
+  const base = document.originalName || documentLabel(document.documentType).replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "partner-document";
+  return /\.[a-z0-9]{2,6}$/i.test(base) ? base : `${base}${extension}`;
+}
+
+async function downloadPartnerDocument(document: PartnerDocument) {
+  if (!document.url) return;
+  const name = documentFileName(document);
+  try {
+    const response = await fetch(document.url);
+    if (!response.ok) throw new Error("download failed");
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = window.document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = name;
+    window.document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(document.url, "_blank", "noopener,noreferrer");
+  }
 }
 
 function serviceTone(service: unknown) {
@@ -530,6 +574,7 @@ function PartnerDetailPanel({
   pendingAction?: string;
 }) {
   const partnerId = String(row.id || "");
+  const [activePartnerTab, setActivePartnerTab] = useState<PartnerDetailTab>("Overview");
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["admin-partner-profile", partnerId],
@@ -547,10 +592,14 @@ function PartnerDetailPanel({
 
   const partner = data?.partner || row;
   const approvalState = partnerApprovalState(partner);
-  const profilePhoto = asText(partner.profilePhoto);
   const docs = data?.documents || [];
-  const verifiedDocumentCount = docs.filter((document) => document.validationStatus === "accepted").length + (profilePhoto !== "-" ? 1 : 0);
-  const profileDocument = profilePhoto !== "-" ? [{
+  const profilePhoto = assetUrl(partner.profilePhoto, partner.photoUrl, partner.selfieUrl, row.profilePhoto);
+  const hasUploadedProfileDocument = docs.some((document) => {
+    const type = String(document.documentType || "").toLowerCase();
+    return type === "profile_photo" || type === "selfie_photo" || (profilePhoto && document.url === profilePhoto);
+  });
+  const verifiedDocumentCount = docs.filter((document) => document.validationStatus === "accepted").length + (profilePhoto ? 1 : 0);
+  const profileDocument = profilePhoto && !hasUploadedProfileDocument ? [{
     id: "profile-photo",
     documentType: "profile_photo",
     originalName: "Profile Photo",
@@ -564,6 +613,15 @@ function PartnerDetailPanel({
   } satisfies PartnerDocument] : [];
   const visibleDocs = [...profileDocument, ...docs];
   const detailRows: Array<[string, unknown]> = [
+    ["Full Name", partner.fullName || partner.name],
+    ["Mobile Number", partner.mobileNumber || partner.phone],
+    ["Email", partner.email],
+    ["Date Of Birth", partner.dateOfBirth],
+    ["Gender", partner.gender],
+    ["Complete Residential Address", partner.completeResidentialAddress || partner.residentialAddress],
+    ["City", partner.city],
+    ["State", partner.state],
+    ["PIN Code", partner.pinCode],
     ["Emergency Contact Number", partner.emergencyContactNumber],
     ["Profession Service Category", partner.professionServiceCategory],
     ["Years Of Experience", partner.yearsOfExperience],
@@ -584,17 +642,25 @@ function PartnerDetailPanel({
     <div className="space-y-4">
       <div className="admin-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-3">
-          <button className="text-xs font-black text-[#667085]">Back to Partners</button>
+          <button type="button" onClick={() => window.history.back()} className="text-xs font-black text-[#667085]">Back to Partners</button>
           <button className="grid h-8 w-8 place-items-center rounded-lg border border-[#e6eaf2] text-[#667085]"><MoreVertical size={16} /></button>
         </div>
         <div className="bg-gradient-to-r from-[#eefbf4] to-[#f8fffb] p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              {profilePhoto !== "-" ? (
-                <img src={profilePhoto} alt="Partner profile" className="h-16 w-16 rounded-full border-4 border-white object-cover shadow-sm" />
-              ) : (
-                <div className="grid h-16 w-16 place-items-center rounded-full bg-[#dff8ea] text-lg font-black text-[#079455]">{initials(partner.fullName || partner.name)}</div>
-              )}
+              <div className="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-white bg-[#dff8ea] text-lg font-black text-[#079455] shadow-sm">
+                <span>{initials(partner.fullName || partner.name)}</span>
+                {profilePhoto ? (
+                  <img
+                    src={profilePhoto}
+                    alt="Partner profile"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.remove();
+                    }}
+                  />
+                ) : null}
+              </div>
               <div className="min-w-0">
                 <h2 className="text-lg font-black text-[#111827]">Partner Verification</h2>
                 <p className="mt-1 text-xs font-bold text-[#667085]">{asText(partner.partnerCode || row.code)} <Status value={asText(partner.currentVerificationStatus || row.approval)} /></p>
@@ -636,8 +702,15 @@ function PartnerDetailPanel({
           </div>
         </div>
         <div className="flex gap-2 border-b border-[#edf0f6] px-4 py-3 text-xs font-black">
-          {["Overview", "Documents", "History", "Activity"].map((tab, index) => (
-            <span key={tab} className={cn("rounded-lg px-3 py-2", index === 0 ? "bg-[#e8f8ef] text-[#079455]" : "text-[#667085]")}>{tab}</span>
+          {(["Overview", "Documents", "History", "Activity"] as PartnerDetailTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActivePartnerTab(tab)}
+              className={cn("rounded-lg px-3 py-2 transition", activePartnerTab === tab ? "bg-[#eef5ff] text-[#0b6df6]" : "text-[#667085] hover:bg-[#f8fbff]")}
+            >
+              {tab}
+            </button>
           ))}
         </div>
 
@@ -645,7 +718,7 @@ function PartnerDetailPanel({
         {isLoading && <div className="m-4 rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">Loading complete profile...</div>}
 
         <div className="grid gap-4 p-4 xl:grid-cols-[1fr_320px]">
-          <section className="rounded-lg border border-[#edf0f6]">
+          <section className={cn("rounded-lg border border-[#edf0f6]", activePartnerTab !== "Overview" && "hidden")}>
             <div className="flex items-center gap-2 border-b border-[#edf0f6] px-4 py-3">
               <UserRound size={16} className="text-[#079455]" />
               <h3 className="text-sm font-black">Partner Details</h3>
@@ -660,7 +733,7 @@ function PartnerDetailPanel({
             </div>
           </section>
 
-          <section className="rounded-lg border border-[#edf0f6]">
+          <section className={cn("rounded-lg border border-[#edf0f6]", activePartnerTab !== "Documents" && "hidden", activePartnerTab === "Documents" && "xl:col-span-2")}>
             <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-3">
               <div className="flex items-center gap-2">
                 <FileText size={16} className="text-[#079455]" />
@@ -668,34 +741,93 @@ function PartnerDetailPanel({
               </div>
               <span className="rounded-full bg-[#e8f8ef] px-2 py-1 text-xs font-black text-[#079455]">{visibleDocs.length}</span>
             </div>
-            <div className="max-h-[520px] space-y-3 overflow-y-auto p-4">
+            <div className="max-h-[620px] space-y-3 overflow-y-auto p-4">
               {visibleDocs.length === 0 ? (
                 <p className="rounded-lg bg-[#fff7f9] p-3 text-xs font-bold text-[#d92d4b]">No profile photo or documents uploaded yet.</p>
               ) : visibleDocs.map((document) => (
-                <div key={document.id} className="flex gap-3 rounded-lg border border-[#edf0f6] p-2">
-                  <a href={document.url || "#"} target="_blank" className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#f8fbff]">
-                    {document.url && (document.mimeType?.startsWith("image/") || document.url.startsWith("data:image/")) ? (
-                      <img src={document.url} alt={documentLabel(document.documentType)} className="h-full w-full object-cover" />
-                    ) : <FileText size={22} className="text-[#667085]" />}
-                  </a>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-black text-[#111827]">{documentLabel(document.documentType)}</p>
-                    <Status value={document.validationStatus === "accepted" ? "Verified" : document.validationStatus} />
-                    {document.url ? <a href={document.url} target="_blank" className="mt-1 block text-xs font-black text-[#0b6df6]">View</a> : <p className="mt-1 text-xs font-bold text-[#d92d4b]">Missing file URL</p>}
+                <div key={document.id} className="grid gap-3 rounded-xl border border-[#edf0f6] bg-white p-3 shadow-sm md:grid-cols-[120px_1fr_auto]">
+                  <button
+                    type="button"
+                    disabled={!document.url}
+                    onClick={() => document.url && window.open(document.url, "_blank", "noopener,noreferrer")}
+                    className="grid h-24 w-full place-items-center overflow-hidden rounded-lg bg-[#f8fbff] disabled:cursor-not-allowed md:w-[120px]"
+                    aria-label={`View ${documentLabel(document.documentType)}`}
+                  >
+                    {isImageDocument(document) ? (
+                      <img
+                        src={document.url}
+                        alt={documentLabel(document.documentType)}
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    ) : <FileText size={26} className="text-[#667085]" />}
+                  </button>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-black text-[#111827]">{documentLabel(document.documentType)}</p>
+                      <Status value={document.validationStatus === "accepted" ? "Verified" : document.validationStatus} />
+                    </div>
+                    <p className="mt-1 text-xs font-semibold text-[#667085]">{document.originalName || "Uploaded file"} · {document.mimeType || "image"} · {document.sizeBytes ? `${formatNumber(document.sizeBytes)} bytes` : "size not recorded"}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#98a2b3]">Uploaded: {formatDate(document.uploadedAt)}</p>
+                    {document.validationReasons?.length ? (
+                      <p className="mt-2 rounded-lg bg-[#fff7f9] p-2 text-xs font-bold text-[#d92d4b]">{document.validationReasons.join(", ")}</p>
+                    ) : null}
+                    {!document.url ? <p className="mt-2 rounded-lg bg-[#fff7f9] p-2 text-xs font-bold text-[#d92d4b]">Missing file URL from backend.</p> : null}
                     {document.id !== "profile-photo" && (
-                      <div className="mt-2 flex gap-2">
-                        <button onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })} className="rounded-md bg-[#e8f8ef] px-2 py-1 text-[11px] font-black text-[#079455]">Verify</button>
-                        <button onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "rejected" })} className="rounded-md bg-[#fff0f4] px-2 py-1 text-[11px] font-black text-[#d92d4b]">Reject</button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={documentMutation.isPending}
+                          onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "accepted" })}
+                          className="rounded-md bg-[#e8f8ef] px-3 py-1.5 text-[11px] font-black text-[#079455] disabled:opacity-60"
+                        >
+                          Verify
+                        </button>
+                        <button
+                          type="button"
+                          disabled={documentMutation.isPending}
+                          onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "review" })}
+                          className="rounded-md bg-[#fff4df] px-3 py-1.5 text-[11px] font-black text-[#c26a00] disabled:opacity-60"
+                        >
+                          Review
+                        </button>
+                        <button
+                          type="button"
+                          disabled={documentMutation.isPending}
+                          onClick={() => documentMutation.mutate({ documentId: document.id, validationStatus: "rejected" })}
+                          className="rounded-md bg-[#fff0f4] px-3 py-1.5 text-[11px] font-black text-[#d92d4b] disabled:opacity-60"
+                        >
+                          Reject
+                        </button>
                       </div>
                     )}
                   </div>
-                  {document.url ? <a href={document.url} target="_blank" className="grid h-9 w-9 place-items-center rounded-lg border border-[#d7f2e2] text-[#079455]"><Download size={15} /></a> : null}
+                  <div className="flex items-center gap-2 md:flex-col md:items-end">
+                    <button
+                      type="button"
+                      disabled={!document.url}
+                      onClick={() => document.url && window.open(document.url, "_blank", "noopener,noreferrer")}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e6eaf2] px-3 text-xs font-black text-[#0b6df6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Eye size={15} />View
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!document.url}
+                      onClick={() => downloadPartnerDocument(document)}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d7f2e2] px-3 text-xs font-black text-[#079455] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Download size={15} />Download
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="rounded-lg border border-[#edf0f6] p-4">
+          <section className={cn("rounded-lg border border-[#edf0f6] p-4", activePartnerTab !== "Overview" && "hidden")}>
             <div className="flex items-center gap-2"><UserRound size={16} className="text-[#079455]" /><h3 className="text-sm font-black">About Partner</h3></div>
             <p className="mt-3 rounded-lg bg-[#f8fbff] p-3 text-sm font-semibold text-[#475467]">
               {asText(partner.fullName || row.name)} is registered for {formatValue("services", partner.professionServiceCategory || row.services)} with {formatValue("yearsOfExperience", partner.yearsOfExperience || 0)} years of experience.
@@ -707,7 +839,7 @@ function PartnerDetailPanel({
             </div>
           </section>
 
-          <section className="grid gap-4 xl:grid-cols-1">
+          <section className={cn("grid gap-4 xl:grid-cols-1", activePartnerTab !== "Overview" && "hidden")}>
             <div className="rounded-lg border border-[#edf0f6] p-4">
               <h3 className="text-sm font-black">Verification Notes</h3>
               <p className="mt-3 rounded-lg bg-[#effbf4] p-3 text-xs font-bold text-[#079455]">All documents and profile photo are fetched from the live backend. Verified documents: {verifiedDocumentCount}.</p>
@@ -718,6 +850,64 @@ function PartnerDetailPanel({
               <Link href={`/partners/${encodeURIComponent(partnerId)}`} className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#edf0f6] px-3 py-3 text-xs font-black hover:bg-[#f8fbff]"><span className="inline-flex items-center gap-2"><UserRound size={15} />View Partner Profile</span><span>&gt;</span></Link>
             </div>
           </section>
+          {activePartnerTab === "History" && (
+            <section className="grid gap-4 xl:col-span-2 xl:grid-cols-2">
+              <div className="rounded-lg border border-[#edf0f6] p-4">
+                <h3 className="text-sm font-black">Booking History</h3>
+                <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
+                  {(data?.bookingHistory || []).length === 0 ? (
+                    <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No booking history found for this partner.</p>
+                  ) : (data?.bookingHistory || []).map((booking) => (
+                    <div key={String(booking.id)} className="rounded-lg border border-[#edf0f6] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-black text-[#0b6df6]">{asText(booking.bookingCode || booking.id)}</p>
+                        <Status value={asText(booking.status || booking.bookingStatus)} />
+                      </div>
+                      <p className="mt-1 text-sm font-black text-[#111827]">{asText(booking.serviceName || booking.serviceCategory || booking.service)}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">Customer: {asText(booking.customerName || booking.customer)} - Amount: Rs {asText(booking.finalAmount || booking.amount || 0)}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(booking.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-[#edf0f6] p-4">
+                <h3 className="text-sm font-black">Support Ticket History</h3>
+                <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
+                  {(data?.supportTickets || []).length === 0 ? (
+                    <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No support tickets found for this partner.</p>
+                  ) : (data?.supportTickets || []).map((ticket) => (
+                    <div key={String(ticket.id)} className="rounded-lg border border-[#edf0f6] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-[#111827]">{asText(ticket.title || ticket.category)}</p>
+                        <Status value={asText(ticket.status)} />
+                      </div>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">{asText(ticket.message || ticket.body)}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(ticket.createdAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+          {activePartnerTab === "Activity" && (
+            <section className="rounded-lg border border-[#edf0f6] p-4 xl:col-span-2">
+              <h3 className="text-sm font-black">Activity Timeline</h3>
+              <div className="mt-4 max-h-[560px] space-y-3 overflow-y-auto">
+                {(data?.activityHistory || []).length === 0 ? (
+                  <p className="rounded-lg bg-[#f8fbff] p-3 text-xs font-bold text-[#667085]">No activity available yet.</p>
+                ) : (data?.activityHistory || []).map((activity) => (
+                  <div key={String(activity.id)} className="flex gap-3 rounded-lg border border-[#edf0f6] p-3">
+                    <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-[#079455]" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-[#111827]">{asText(activity.title || activity.type)}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#667085]">{asText(activity.description || activity.message)}</p>
+                      <p className="mt-1 text-xs font-bold text-[#98a2b3]">{formatDate(activity.createdAt)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>
