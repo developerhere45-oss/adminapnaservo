@@ -4,11 +4,15 @@ import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   CalendarCheck,
+  CalendarDays,
   CheckCircle2,
   Clock3,
   ClipboardList,
+  CreditCard,
   IndianRupee,
+  MessageSquareText,
   RefreshCw,
   ShieldCheck,
   Users,
@@ -133,18 +137,30 @@ function formatDate(value: unknown) {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function formatRecentDate(value: unknown) {
+  if (!value) return { date: "Not recorded", time: "" };
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return { date: String(value), time: "" };
+  return {
+    date: new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(parsed),
+    time: new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit" }).format(parsed),
+  };
+}
+
 function Status({ value }: { value: string }) {
-  const clean = value.toLowerCase();
+  const clean = value.toLowerCase().replace(/_/g, " ");
+  const tone = clean.includes("complete") || clean.includes("paid") || clean.includes("resolved")
+    ? "bg-[#e8f8ef] text-[#079455]"
+    : clean.includes("confirm") || clean.includes("accepted") || clean.includes("review") || clean.includes("progress") || clean.includes("processing") || clean.includes("on the way")
+      ? "bg-[#e9f2ff] text-[#0b6df6]"
+      : clean.includes("pending") || clean.includes("created") || clean.includes("open") || clean.includes("assigned")
+        ? "bg-[#fff4df] text-[#c26a00]"
+        : clean.includes("cancel") || clean.includes("failed") || clean.includes("reject") || clean.includes("blocked")
+          ? "bg-[#ffebef] text-[#d92d4b]"
+          : "bg-[#f2f4f7] text-[#475467]";
   return (
-    <span
-      className={cn(
-        "status-pill",
-        clean.includes("complete") || clean.includes("paid") || clean.includes("resolved") ? "bg-[#e8f8ef] text-[#079455]" : "",
-        clean.includes("pending") || clean.includes("progress") || clean.includes("processing") || clean.includes("created") ? "bg-[#fff4df] text-[#c26a00]" : "",
-        clean.includes("open") || clean.includes("cancel") || clean.includes("failed") ? "bg-[#ffebef] text-[#d92d4b]" : "",
-      )}
-    >
-      {value || "-"}
+    <span className={cn("status-pill whitespace-nowrap capitalize", tone)}>
+      {(value || "-").replace(/_/g, " ")}
     </span>
   );
 }
@@ -181,30 +197,89 @@ function MetricCard({ label, value, note, icon: Icon, tone, href }: { label: str
   );
 }
 
-function MiniTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
+type RecentRow = {
+  id: string;
+  code: string;
+  values: string[];
+  date: unknown;
+  status: string;
+  href: string;
+};
+
+function RecentTable({
+  title,
+  href,
+  headers,
+  rows,
+  icon: Icon,
+  iconTone,
+  codeTone,
+  emptyTitle,
+  emptyText,
+}: {
+  title: string;
+  href: string;
+  headers: string[];
+  rows: RecentRow[];
+  icon: typeof CalendarDays;
+  iconTone: string;
+  codeTone: string;
+  emptyTitle: string;
+  emptyText: string;
+}) {
   return (
-    <div className="admin-card overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4">
-        <h2 className="text-lg font-black">{title}</h2>
+    <div className="admin-card flex min-h-[430px] min-w-0 flex-col overflow-hidden">
+      <div className="flex min-h-16 items-center justify-between gap-4 border-b border-[#edf0f6] px-5 py-4">
+        <h2 className="flex min-w-0 items-center gap-2.5 text-[17px] font-black text-[#172033]">
+          <Icon size={21} className={iconTone} strokeWidth={2.2} />
+          <span className="truncate">{title}</span>
+        </h2>
+        <Link href={href} className="shrink-0 text-sm font-bold text-[#0b6df6] transition hover:text-[#0754bd]">View All</Link>
       </div>
-      <table className="w-full text-left text-sm">
-        <thead className="text-xs text-[#667085]">
-          <tr>{headers.map((header) => <th key={header} className="px-5 py-3 font-bold">{header}</th>)}</tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr><td colSpan={headers.length} className="px-5 py-10 text-center text-sm font-semibold text-[#667085]">No live records found.</td></tr>
-          ) : rows.map((row) => (
-            <tr key={row.join("-")} className="border-t border-[#edf0f6]">
-              {row.map((cell, index) => (
-                <td key={`${cell}-${index}`} className="px-5 py-3 font-medium text-[#263149]">
-                  {index === row.length - 1 ? <Status value={cell} /> : index === 0 ? <span className="font-black text-[#0b6df6]">{cell}</span> : cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {rows.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
+          <div className={cn("grid h-24 w-24 place-items-center rounded-full", iconTone === "text-[#12b76a]" ? "bg-[#ecfbf5]" : "bg-[#f4f7fb]")}> 
+            <Icon size={42} className={iconTone} strokeWidth={1.6} />
+          </div>
+          <p className="mt-5 text-base font-black text-[#172033]">{emptyTitle}</p>
+          <p className="mt-2 max-w-[260px] text-sm font-medium leading-6 text-[#7b8497]">{emptyText}</p>
+        </div>
+      ) : (
+        <>
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <table className="w-full min-w-[510px] table-fixed text-left text-[13px]">
+              <thead className="bg-[#fbfcfe] text-[11px] text-[#667085]">
+                <tr>{headers.map((header) => <th key={header} className="px-4 py-3.5 font-bold">{header}</th>)}</tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 5).map((row) => {
+                  const date = formatRecentDate(row.date);
+                  return (
+                    <tr key={row.id} className="border-t border-[#edf0f6] transition-colors hover:bg-[#f8fbff]">
+                      <td className="px-4 py-3.5 align-middle">
+                        <Link href={row.href} className={cn("inline-flex max-w-full", codeTone ? "rounded-md border px-2 py-1 text-[11px] font-black" : "font-semibold text-[#263149]", codeTone)} title={row.code}>
+                          <span className="truncate">{row.code}</span>
+                        </Link>
+                      </td>
+                      {row.values.map((value, index) => (
+                        <td key={`${row.id}-${index}`} className="truncate px-4 py-3.5 font-semibold text-[#263149]" title={value}>{value}</td>
+                      ))}
+                      <td className="px-4 py-3.5 font-medium text-[#344054]">
+                        <span className="block whitespace-nowrap">{date.date}</span>
+                        {date.time && <span className="mt-0.5 block text-[11px] text-[#7b8497]">{date.time}</span>}
+                      </td>
+                      <td className="px-4 py-3.5"><Status value={row.status} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Link href={href} className="mt-auto flex h-12 items-center justify-center gap-2 border-t border-[#edf0f6] text-sm font-bold text-[#0b6df6] transition hover:bg-[#f8fbff]">
+            View all {title.replace("Recent ", "").toLowerCase()} <ArrowRight size={16} />
+          </Link>
+        </>
+      )}
     </div>
   );
 }
@@ -313,25 +388,30 @@ export function DashboardClient() {
   });
   const analytics = data.analytics;
 
-  const recentBookings = data.recentBookings.map((row) => [
-    asText(row.bookingCode),
-    asText(row.userName),
-    asText(row.serviceName),
-    asText(row.partnerName),
-    asText(row.status),
-  ]);
-  const recentComplaints = data.recentComplaints.map((row) => [
-    asText(row.complaintId),
-    asText(row.userName),
-    asText(row.type),
-    asText(row.status),
-  ]);
-  const recentPayments = data.recentPayments.map((row) => [
-    asText(row.partnerName || row.userName || row.bookingCode),
-    formatMoney(Number(row.amount || 0)),
-    formatDate(row.createdAt),
-    asText(row.status),
-  ]);
+  const recentBookings: RecentRow[] = data.recentBookings.map((row, index) => ({
+    id: asText(row.id || row.bookingCode || index),
+    code: asText(row.bookingCode || row.id),
+    values: [asText(row.userName), asText(row.serviceName || row.serviceCategory)],
+    date: row.bookingDateTime || row.createdAt || row.bookingDate || row.scheduledAt,
+    status: asText(row.status),
+    href: `/bookings/${encodeURIComponent(asText(row.id || row.bookingCode))}`,
+  }));
+  const recentComplaints: RecentRow[] = data.recentComplaints.map((row, index) => ({
+    id: asText(row.id || row.complaintId || index),
+    code: asText(row.complaintId || row.id),
+    values: [asText(row.userName), asText(row.type || row.category)],
+    date: row.createdAt || row.lastUpdated,
+    status: asText(row.status),
+    href: row.source === "support_ticket" ? `/users/support/${encodeURIComponent(asText(row.id || row.complaintId))}` : "/complaints",
+  }));
+  const recentPayments: RecentRow[] = data.recentPayments.map((row, index) => ({
+    id: asText(row.id || row.bookingCode || index),
+    code: asText(row.partnerName || row.userName || row.bookingCode),
+    values: [formatMoney(Number(row.amount || 0))],
+    date: row.createdAt,
+    status: asText(row.status),
+    href: "/payments",
+  }));
 
   return (
     <div>
@@ -369,9 +449,39 @@ export function DashboardClient() {
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-3">
-        <MiniTable title="Recent Bookings" headers={["Booking ID", "User", "Service", "Partner", "Status"]} rows={recentBookings} />
-        <MiniTable title="Recent Complaints" headers={["ID", "User", "Type", "Status"]} rows={recentComplaints} />
-        <MiniTable title="Recent Payments" headers={["Name", "Amount", "Date", "Status"]} rows={recentPayments} />
+        <RecentTable
+          title="Recent Bookings"
+          href="/bookings"
+          headers={["Booking ID", "Customer", "Service", "Date", "Status"]}
+          rows={recentBookings}
+          icon={CalendarDays}
+          iconTone="text-[#0b6df6]"
+          codeTone="border-[#cfe0ff] bg-[#eef5ff] text-[#0b6df6]"
+          emptyTitle="No bookings yet"
+          emptyText="New customer bookings will appear here in real time."
+        />
+        <RecentTable
+          title="Recent Complaints"
+          href="/users/support"
+          headers={["ID", "Customer", "Issue", "Date", "Status"]}
+          rows={recentComplaints}
+          icon={MessageSquareText}
+          iconTone="text-[#7c3aed]"
+          codeTone="border-[#ddd2ff] bg-[#f3eaff] text-[#7c3aed]"
+          emptyTitle="No complaints yet"
+          emptyText="Customer complaints and support requests will appear here."
+        />
+        <RecentTable
+          title="Recent Payments"
+          href="/payments"
+          headers={["Name", "Amount", "Date", "Status"]}
+          rows={recentPayments}
+          icon={CreditCard}
+          iconTone="text-[#12b76a]"
+          codeTone=""
+          emptyTitle="No payments yet"
+          emptyText="Recent customer payments will appear here."
+        />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[.9fr_1fr]">
