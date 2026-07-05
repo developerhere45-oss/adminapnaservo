@@ -247,7 +247,7 @@ function RecentTable({
       ) : (
         <>
           <div className="min-w-0 flex-1 overflow-x-auto">
-            <table className="w-full min-w-[510px] table-fixed text-left text-[13px]">
+            <table className="w-full min-w-[450px] table-fixed text-left text-[13px]">
               <thead className="bg-[#fbfcfe] text-[11px] text-[#667085]">
                 <tr>{headers.map((header) => <th key={header} className="px-4 py-3.5 font-bold">{header}</th>)}</tr>
               </thead>
@@ -448,7 +448,7 @@ export function DashboardClient() {
         <LiveWorkflowActivity fallback={data.recentActivity || []} />
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-3">
+      <section className="mt-5 grid gap-5 xl:grid-cols-2 min-[1600px]:grid-cols-3">
         <RecentTable
           title="Recent Bookings"
           href="/bookings"
