@@ -238,7 +238,7 @@ function RecentTable({
       </div>
       {rows.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
-          <div className={cn("grid h-24 w-24 place-items-center rounded-full", iconTone === "text-[#12b76a]" ? "bg-[#ecfbf5]" : "bg-[#f4f7fb]")}> 
+          <div className={cn("grid h-24 w-24 place-items-center rounded-full", iconTone === "text-[#12b76a]" ? "bg-[#ecfbf5]" : "bg-[#f4f7fb]")}>
             <Icon size={42} className={iconTone} strokeWidth={1.6} />
           </div>
           <p className="mt-5 text-base font-black text-[#172033]">{emptyTitle}</p>
