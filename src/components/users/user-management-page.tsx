@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { liveQueryDefaults, visibleRefetchInterval } from "@/lib/live-query";
 import {
   Activity,
   CalendarCheck,
@@ -69,6 +70,10 @@ type ControlCenterData = {
   };
   users: UserRow[];
   supportTickets: SupportTicketRow[];
+  pagination: {
+    users: { page: number; pageSize: number; total: number };
+    supportTickets: { page: number; pageSize: number; total: number };
+  };
 };
 
 type Filters = {
@@ -108,6 +113,10 @@ const emptyData: ControlCenterData = {
   },
   users: [],
   supportTickets: [],
+  pagination: {
+    users: { page: 1, pageSize: 10, total: 0 },
+    supportTickets: { page: 1, pageSize: 10, total: 0 },
+  },
 };
 
 function formatDateTime(value: string) {
@@ -157,11 +166,14 @@ function MetricCard({
   );
 }
 
-async function fetchControlCenter(filters: Filters): Promise<ControlCenterData> {
+async function fetchControlCenter(filters: Filters, page: number, ticketPage: number, pageSize: number): Promise<ControlCenterData> {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value.trim()) params.set(key, value.trim());
   });
+  params.set("page", String(page));
+  params.set("ticketPage", String(ticketPage));
+  params.set("pageSize", String(pageSize));
   const response = await fetch(`/api/admin/users/control-center?${params.toString()}`, { cache: "no-store" });
   if (!response.ok) throw new Error("Live backend unavailable");
   return response.json();
@@ -198,19 +210,15 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
   const [ticketsPage, setTicketsPage] = useState(1);
   const pageSize = 10;
   const { data = emptyData, isFetching, isError, refetch } = useQuery({
-    queryKey: ["users-control-center", filters],
-    queryFn: () => fetchControlCenter(filters),
-    refetchInterval: 30_000,
+    ...liveQueryDefaults,
+    queryKey: ["users-control-center", filters, usersPage, ticketsPage, pageSize],
+    queryFn: () => fetchControlCenter(filters, usersPage, ticketsPage, pageSize),
+    refetchInterval: visibleRefetchInterval(30_000),
+    placeholderData: (previousData) => previousData,
   });
 
-  const users = useMemo(
-    () => data.users.slice((usersPage - 1) * pageSize, usersPage * pageSize),
-    [data.users, usersPage],
-  );
-  const tickets = useMemo(
-    () => data.supportTickets.slice((ticketsPage - 1) * pageSize, ticketsPage * pageSize),
-    [data.supportTickets, ticketsPage],
-  );
+  const users = data.users;
+  const tickets = data.supportTickets;
   const analytics = data.analytics;
   const metrics = [
     ["Total Users", analytics.totalUsers, Users, "bg-[#eef5ff] text-[#0b6df6]"],
@@ -340,7 +348,7 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
                 </tbody>
               </table>
             </div>
-            <Pagination page={usersPage} total={data.users.length} pageSize={pageSize} onPage={setUsersPage} />
+            <Pagination page={usersPage} total={data.pagination?.users.total || 0} pageSize={pageSize} onPage={setUsersPage} />
           </>
         ) : (
           <>
@@ -369,7 +377,7 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
                 </tbody>
               </table>
             </div>
-            <Pagination page={ticketsPage} total={data.supportTickets.length} pageSize={pageSize} onPage={setTicketsPage} />
+            <Pagination page={ticketsPage} total={data.pagination?.supportTickets.total || 0} pageSize={pageSize} onPage={setTicketsPage} />
           </>
         )}
       </section>

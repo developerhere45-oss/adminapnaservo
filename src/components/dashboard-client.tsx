@@ -15,6 +15,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { liveQueryDefaults, visibleRefetchInterval } from "@/lib/live-query";
 import { cn } from "@/lib/utils";
 
 type Analytics = {
@@ -257,9 +258,10 @@ function activityTone(category: string) {
 
 function LiveWorkflowActivity({ fallback = [] }: { fallback?: ActivityItem[] }) {
   const { data, isFetching, isError } = useQuery({
+    ...liveQueryDefaults,
     queryKey: ["admin-activity"],
     queryFn: fetchActivity,
-    refetchInterval: 15_000,
+    refetchInterval: visibleRefetchInterval(15_000),
   });
   const activity = data?.activity?.length ? data.activity : fallback;
 
@@ -304,9 +306,10 @@ function LiveWorkflowActivity({ fallback = [] }: { fallback?: ActivityItem[] }) 
 
 export function DashboardClient() {
   const { data = emptyOverview, isFetching, isError, refetch } = useQuery({
+    ...liveQueryDefaults,
     queryKey: ["overview"],
     queryFn: fetchOverview,
-    refetchInterval: 30_000,
+    refetchInterval: visibleRefetchInterval(30_000),
   });
   const analytics = data.analytics;
 

@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { liveQueryDefaults, visibleRefetchInterval } from "@/lib/live-query";
 import { resourceConfig } from "@/lib/resource-config";
 import { cn } from "@/lib/utils";
 
@@ -659,10 +660,11 @@ function PartnerDetailPanel({
   const [activePartnerTab, setActivePartnerTab] = useState<PartnerDetailTab>("Overview");
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
+    ...liveQueryDefaults,
     queryKey: ["admin-partner-profile", partnerId],
     queryFn: () => fetchPartnerProfile(partnerId),
     enabled: Boolean(partnerId),
-    refetchInterval: 30_000,
+    refetchInterval: visibleRefetchInterval(30_000),
   });
   const documentMutation = useMutation({
     mutationFn: ({ documentId, validationStatus }: { documentId: string; validationStatus: "accepted" | "rejected" | "review" }) =>
@@ -1074,9 +1076,11 @@ export function StandalonePartnerProfile({ partnerId }: { partnerId: string }) {
   const [pendingAction, setPendingAction] = useState("");
   const queryClient = useQueryClient();
   const profileQuery = useQuery({
+    ...liveQueryDefaults,
     queryKey: ["admin-partner-profile-shell", partnerId],
     queryFn: () => fetchPartnerProfile(partnerId),
     enabled: Boolean(partnerId),
+    refetchInterval: visibleRefetchInterval(30_000),
   });
   const row = useMemo<ResourceRow>(() => {
     const partner = profileQuery.data?.partner || {};
@@ -1201,9 +1205,10 @@ export function ModulePage({ resource }: { resource: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data, isFetching, isError, refetch } = useQuery({
+    ...liveQueryDefaults,
     queryKey: ["admin-resource", resource],
     queryFn: () => fetchResource(resource),
-    refetchInterval: 30_000,
+    refetchInterval: visibleRefetchInterval(30_000),
     enabled: resource !== "settings" && resource !== "logout",
   });
   const actionMutation = useMutation({
