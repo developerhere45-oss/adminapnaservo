@@ -11,12 +11,14 @@ export async function GET() {
     return NextResponse.json({
       ok: response.ok,
       status: response.status,
+      adminRelease: String(process.env.RENDER_GIT_COMMIT || process.env.APP_RELEASE || "local").slice(0, 7),
       backendUrl,
       backend: payload,
     }, { status: response.ok ? 200 : 502 });
   } catch (error) {
     return NextResponse.json({
       ok: false,
+      adminRelease: String(process.env.RENDER_GIT_COMMIT || process.env.APP_RELEASE || "local").slice(0, 7),
       backendUrl,
       message: error instanceof Error ? error.message : "Backend health check failed",
     }, { status: 502 });
