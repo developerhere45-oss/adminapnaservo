@@ -15,12 +15,14 @@ import {
   LogOut,
   Menu,
   Megaphone,
+  MessageSquare,
   RefreshCw,
   Settings,
   ShieldCheck,
   Smartphone,
   Ticket,
   UserCheck,
+  UserCog,
   Users,
   WalletCards,
   X,
@@ -33,6 +35,8 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/users", label: "Users", icon: Users },
   { href: "/users/support", label: "Support & Complaints", icon: Ticket, child: true },
+  { href: "/chats", label: "Chats", icon: MessageSquare },
+  { href: "/employees", label: "Employees", icon: UserCog },
   { href: "/notifications", label: "Notifications", icon: Megaphone },
   { href: "/devices", label: "Devices", icon: Smartphone },
   { href: "/partners", label: "Partners", icon: UserCheck },
@@ -45,8 +49,10 @@ const navItems = [
 ];
 
 function Logo({ onClick }: { onClick?: () => void }) {
+  const pathname = usePathname();
+  const base = pathname.startsWith("/admin") ? "/admin" : "";
   return (
-    <Link href="/dashboard" onClick={onClick} className="flex h-[88px] items-center border-b border-[#edf0f6] px-7">
+    <Link href={`${base}/dashboard`} onClick={onClick} className="flex h-[88px] items-center border-b border-[#edf0f6] px-7">
       <img src="/apna-servo-wordmark.png" alt="ApnaServo" className="h-10 w-[156px] object-contain object-left" />
     </Link>
   );
@@ -54,6 +60,7 @@ function Logo({ onClick }: { onClick?: () => void }) {
 
 function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const base = pathname.startsWith("/admin") ? "/admin" : "";
 
   return (
     <aside
@@ -75,12 +82,13 @@ function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?
       )}
       <nav className="space-y-1 px-4 py-6">
         {navItems.map((item) => {
-          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+          const href = `${base}${item.href}`;
+          const active = pathname === href || (href !== `${base}/dashboard` && pathname.startsWith(`${href}/`));
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={href}
               onClick={onNavigate}
               className={cn(
                 "flex h-12 items-center gap-3 rounded-lg px-3 text-[14px] font-semibold text-[#263149] transition hover:bg-[#eef5ff] hover:text-[#0b6df6]",

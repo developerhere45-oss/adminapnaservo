@@ -38,6 +38,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { liveQueryDefaults, visibleRefetchInterval } from "@/lib/live-query";
 import { resourceConfig } from "@/lib/resource-config";
 import { cn } from "@/lib/utils";
+import { LogoutButton } from "@/components/auth/logout-button";
+import { AdminChatsPage } from "@/components/admin/admin-chats-page";
+import { EmployeeManagementPage } from "@/components/admin/employee-management-page";
 
 type ResourceRow = Record<string, unknown> & { id?: string };
 type ResourcePayload = {
@@ -1189,8 +1192,8 @@ function LogoutPage() {
         <div className="admin-card w-full max-w-[560px] p-10 text-center">
           <div className="mx-auto grid h-28 w-28 place-items-center rounded-full bg-[#eef5ff] text-[#0b6df6]"><LogOut size={54} /></div>
           <h2 className="mt-7 text-3xl font-black">Ready to Logout?</h2>
-          <p className="mt-4 text-[#667085]">Password/login is disabled for this local build as requested.</p>
-          <Link href="/dashboard" className="mt-8 grid h-12 w-full place-items-center rounded-lg bg-[#0b6df6] text-sm font-black text-white">Back to Dashboard</Link>
+          <p className="mt-4 text-[#667085]">You will need to sign in again to access the panel.</p>
+          <LogoutButton />
         </div>
       </div>
     </div>
@@ -1235,6 +1238,8 @@ export function ModulePage({ resource }: { resource: string }) {
 
   if (resource === "settings") return <SettingsPage />;
   if (resource === "logout") return <LogoutPage />;
+  if (resource === "employees") return <EmployeeManagementPage />;
+  if (resource === "chats") return <AdminChatsPage />;
 
   const rows = data?.rows || [];
   const visibleRows = filterRowsByMetric(resource, rows, metricFilter);

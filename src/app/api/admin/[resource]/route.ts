@@ -14,7 +14,7 @@ export async function GET(_request: Request, context: { params: Promise<{ resour
   }
 
   try {
-    const data = await getResourceRows(resource);
+    const data = await getResourceRows(resource, session.backendToken);
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ message: "Live backend unavailable" }, { status: 502 });

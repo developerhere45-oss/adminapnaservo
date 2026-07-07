@@ -34,14 +34,16 @@ export function createAdminRealtimeToken(ttlMs = 5 * 60 * 1000) {
   return `${expiresAt}.${signature}`;
 }
 
-export async function fetchBackendJson<T>(path: string, init?: RequestInit): Promise<T> {
+export async function fetchBackendJson<T>(path: string, init?: RequestInit & { bearerToken?: string }): Promise<T> {
   assertProductionBackendConfig();
   const url = `${backendUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const bearerToken = init?.bearerToken;
+  const { bearerToken: _bearerToken, ...fetchInit } = init || {};
   const response = await fetch(url, {
-    ...init,
+    ...fetchInit,
     headers: {
       "Content-Type": "application/json",
-      "X-Admin-Secret": adminBackendSecret,
+      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : { "X-Admin-Secret": adminBackendSecret }),
       ...(init?.headers || {}),
     },
     cache: "no-store",

@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       {
         method: "POST",
         body: JSON.stringify(body.data),
+        bearerToken: session.backendToken,
       },
     );
   } catch (error) {

@@ -47,6 +47,18 @@ export const resourceConfig: Record<string, { title: string; subtitle: string; p
     permission: "bookings:manage",
     action: "Send Notification",
   },
+  employees: {
+    title: "Employees",
+    subtitle: "Dashboard > Employees",
+    permission: "analytics:read",
+    action: "Create Employee",
+  },
+  chats: {
+    title: "Chats",
+    subtitle: "Dashboard > Chats",
+    permission: "complaints:manage",
+    action: "Assign Chat",
+  },
   reports: {
     title: "Reports",
     subtitle: "Dashboard > Reports",

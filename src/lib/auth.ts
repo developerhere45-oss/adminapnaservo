@@ -8,9 +8,37 @@ export type AdminSession = {
   name: string;
   email: string;
   role: AdminRole;
+  type?: "admin";
+  backendToken?: string;
 };
 
-const cookieName = "apnaservo_admin_session";
+export type EmployeePermissions = {
+  viewDashboard?: boolean;
+  viewBookings?: boolean;
+  updateBookingStatus?: boolean;
+  viewPartners?: boolean;
+  approvePartners?: boolean;
+  viewUsers?: boolean;
+  handleChats?: boolean;
+  sendNotifications?: boolean;
+};
+
+export type EmployeeSession = {
+  id: string;
+  employeeId: string;
+  name: string;
+  email: string;
+  department: string;
+  role: "employee";
+  type: "employee";
+  permissions: EmployeePermissions;
+  backendToken?: string;
+};
+
+export type PanelSession = AdminSession | EmployeeSession;
+
+const cookieName = "apnaservo_panel_session";
+const legacyAdminCookieName = "apnaservo_admin_session";
 const encoder = new TextEncoder();
 const defaultJwtSecret = "dev-only-apnaservo-admin-secret-change-me";
 const defaultAdminPassword = "Admin@12345";
@@ -63,27 +91,40 @@ export async function verifyAdminToken(token?: string) {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, jwtSecret());
-    return payload as AdminSession;
+    return payload as PanelSession;
   } catch {
     return null;
   }
 }
 
-export async function getAdminSession() {
+export async function getPanelSession() {
   if (process.env.ADMIN_AUTH_DISABLED === "true") {
     return {
       id: "passwordless-admin",
       name: "Admin",
       email: process.env.ADMIN_EMAIL || "admin@apnaservo.com",
       role: "SUPER_ADMIN",
+      type: "admin",
     } satisfies AdminSession;
   }
   const jar = await cookies();
-  return verifyAdminToken(jar.get(cookieName)?.value);
+  return verifyAdminToken(jar.get(cookieName)?.value || jar.get(legacyAdminCookieName)?.value);
 }
 
-export async function setAdminSession(admin: AdminSession) {
-  const token = await signAdminToken(admin);
+export async function getAdminSession() {
+  const session = await getPanelSession();
+  if (!session || session.type === "employee") return null;
+  return session;
+}
+
+export async function getEmployeeSession() {
+  const session = await getPanelSession();
+  if (!session || session.type !== "employee") return null;
+  return session;
+}
+
+export async function setPanelSession(session: PanelSession) {
+  const token = await signAdminToken(session as AdminSession);
   const jar = await cookies();
   jar.set(cookieName, token, {
     httpOnly: true,
@@ -92,11 +133,21 @@ export async function setAdminSession(admin: AdminSession) {
     path: "/",
     maxAge: 60 * 60 * 8,
   });
+  jar.delete(legacyAdminCookieName);
+}
+
+export async function setAdminSession(admin: AdminSession) {
+  await setPanelSession({ ...admin, type: "admin" });
+}
+
+export async function setEmployeeSession(employee: EmployeeSession) {
+  await setPanelSession(employee);
 }
 
 export async function clearAdminSession() {
   const jar = await cookies();
   jar.delete(cookieName);
+  jar.delete(legacyAdminCookieName);
 }
 
 export async function verifyPassword(password: string, hashOrPlain: string) {
