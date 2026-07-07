@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { backendUrl } from "@/lib/backend";
-import { adminEmail, adminPasswordSecret, setAdminSession, verifyPassword } from "@/lib/auth";
+import { adminEmail, adminPasswordSecret, isAdminAuthDisabled, setAdminSession, verifyPassword } from "@/lib/auth";
 
 const schema = z.object({
   email: z.string().email(),
@@ -13,6 +13,10 @@ function mapAdminRole(role: string) {
 }
 
 export async function POST(request: Request) {
+  if (isAdminAuthDisabled()) {
+    return NextResponse.json({ ok: true, authDisabled: true, admin: { email: process.env.ADMIN_EMAIL || "admin@apnaservo.com", role: "super_admin" } });
+  }
+
   const body = schema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ message: "Invalid login details" }, { status: 400 });
 

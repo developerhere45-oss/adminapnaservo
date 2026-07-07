@@ -53,6 +53,10 @@ function requiredEnv(name: string) {
   return value;
 }
 
+export function isAdminAuthDisabled() {
+  return process.env.ADMIN_AUTH_DISABLED !== "false";
+}
+
 function jwtSecret() {
   const secret = process.env.JWT_SECRET || defaultJwtSecret;
   if (isProduction() && (secret === defaultJwtSecret || secret.length < 32)) {
@@ -98,7 +102,7 @@ export async function verifyAdminToken(token?: string) {
 }
 
 export async function getPanelSession() {
-  if (process.env.ADMIN_AUTH_DISABLED === "true") {
+  if (isAdminAuthDisabled()) {
     return {
       id: "passwordless-admin",
       name: "Admin",

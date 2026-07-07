@@ -56,9 +56,17 @@ function isAdminLegacy(pathname: string) {
   return adminLegacyRoots.some((root) => pathname === root || pathname.startsWith(`${root}/`));
 }
 
+function isAdminAuthDisabled() {
+  return process.env.ADMIN_AUTH_DISABLED !== "false";
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isStatic(pathname) || publicPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
+    return NextResponse.next();
+  }
+
+  if (isAdminAuthDisabled() && (pathname.startsWith("/admin") || isAdminLegacy(pathname))) {
     return NextResponse.next();
   }
 

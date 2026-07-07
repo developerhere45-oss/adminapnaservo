@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 
@@ -14,6 +14,23 @@ export function PanelLoginPage({ kind }: { kind: LoginKind }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (isEmployee) return;
+    let active = true;
+    fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((res) => {
+        if (active && res.ok) router.replace("/admin/dashboard");
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isEmployee, router]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
