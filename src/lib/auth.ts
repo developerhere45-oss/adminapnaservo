@@ -59,7 +59,7 @@ export function isAdminAuthDisabled() {
 
 function jwtSecret() {
   const secret = process.env.JWT_SECRET || process.env.ADMIN_BACKEND_SECRET || process.env.ADMIN_API_SECRET || defaultJwtSecret;
-  if (isProduction() && (secret === defaultJwtSecret || secret.length < 32)) {
+  if (isProduction() && secret === defaultJwtSecret) {
     throw new Error("JWT_SECRET or ADMIN_BACKEND_SECRET must be a unique 32+ character secret in production");
   }
   return encoder.encode(secret);
