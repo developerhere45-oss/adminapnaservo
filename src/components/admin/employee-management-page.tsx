@@ -71,6 +71,7 @@ export function EmployeeManagementPage() {
   const [form, setForm] = useState(defaultForm);
   const [selected, setSelected] = useState<Employee | null>(null);
   const [message, setMessage] = useState("");
+  const [createdCredentials, setCreatedCredentials] = useState<{ employeeId: string; email: string; password: string } | null>(null);
   const { data, isFetching, isError, refetch } = useQuery({
     ...liveQueryDefaults,
     queryKey: ["admin-employees"],
@@ -80,9 +81,10 @@ export function EmployeeManagementPage() {
   const employees = data?.employees || [];
 
   const createMutation = useMutation({
-    mutationFn: () => adminApi("employees", { method: "POST", body: JSON.stringify(form) }),
-    onSuccess: () => {
-      setMessage("Employee created successfully.");
+    mutationFn: () => adminApi<{ employee: Employee }>("employees", { method: "POST", body: JSON.stringify(form) }),
+    onSuccess: (payload) => {
+      setMessage("Employee created successfully. Share these login credentials with the employee.");
+      setCreatedCredentials({ employeeId: payload.employee.employeeId, email: payload.employee.email, password: form.password });
       setForm(defaultForm);
       queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
     },
@@ -106,8 +108,25 @@ export function EmployeeManagementPage() {
     onSuccess: () => setMessage("Employee password reset successfully."),
   });
 
+  function generatePassword() {
+    const bytes = new Uint32Array(2);
+    window.crypto.getRandomValues(bytes);
+    const password = `AS-${bytes[0].toString(36).slice(0, 5).toUpperCase()}-${bytes[1].toString(36).slice(0, 5).toUpperCase()}!`;
+    setForm((current) => ({ ...current, password }));
+    setMessage("Temporary password generated. Save it before creating the employee.");
+  }
+
+  function validateForm() {
+    if (form.name.trim().length < 2) return "Enter the employee full name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Enter a valid employee email address.";
+    if (!selected && form.password.length < 8) return "Employee password must be at least 8 characters.";
+    if (selected && form.password && form.password.length < 8) return "New password must be at least 8 characters.";
+    return "";
+  }
+
   function edit(employee: Employee) {
     setSelected(employee);
+    setCreatedCredentials(null);
     setForm({
       name: employee.name,
       email: employee.email,
@@ -131,11 +150,34 @@ export function EmployeeManagementPage() {
         </button>
       </div>
       {message && <div className="mb-5 rounded-xl border border-[#dfe6f2] bg-white p-4 text-sm font-bold text-[#0b6df6]">{message}</div>}
+      {createdCredentials && (
+        <div className="mb-5 rounded-2xl border border-[#c7e6d4] bg-[#f0fff6] p-4 text-sm font-semibold text-[#075e33]">
+          <div className="font-black">Employee Login Details</div>
+          <div className="mt-2 grid gap-1 sm:grid-cols-3">
+            <span>ID: <b>{createdCredentials.employeeId}</b></span>
+            <span>Email: <b>{createdCredentials.email}</b></span>
+            <span>Password: <b>{createdCredentials.password}</b></span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(`Employee ID: ${createdCredentials.employeeId}\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.password}`)}
+            className="mt-3 rounded-lg border border-[#9bd8b4] bg-white px-3 py-2 text-xs font-black text-[#079455]"
+          >
+            Copy Login Details
+          </button>
+        </div>
+      )}
       {isError && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">Employee backend unavailable.</div>}
       <section className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            setCreatedCredentials(null);
+            const validationError = validateForm();
+            if (validationError) {
+              setMessage(validationError);
+              return;
+            }
             selected ? updateMutation.mutate() : createMutation.mutate();
           }}
           className="rounded-2xl border border-[#e3e9f5] bg-white p-5 shadow-sm"
@@ -151,6 +193,12 @@ export function EmployeeManagementPage() {
                 required={field !== "phone" && !(field === "password" && selected)}
                 className="h-11 w-full rounded-xl border border-[#dfe6f2] px-3 text-sm font-semibold outline-none focus:border-[#0b6df6]"
               />
+              {field === "password" && !selected && (
+                <span className="mt-2 flex items-center justify-between gap-2 text-xs font-semibold text-[#667085]">
+                  Minimum 8 characters required.
+                  <button type="button" onClick={generatePassword} className="font-black text-[#0b6df6]">Generate</button>
+                </span>
+              )}
             </label>
           ))}
           <div className="mb-4 grid grid-cols-2 gap-3">
