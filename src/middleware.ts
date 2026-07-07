@@ -34,7 +34,12 @@ const legacyCookieName = "apnaservo_admin_session";
 const encoder = new TextEncoder();
 
 function jwtSecret() {
-  return encoder.encode(process.env.JWT_SECRET || "dev-only-apnaservo-admin-secret-change-me");
+  return encoder.encode(
+    process.env.JWT_SECRET ||
+    process.env.ADMIN_BACKEND_SECRET ||
+    process.env.ADMIN_API_SECRET ||
+    "dev-only-apnaservo-admin-secret-change-me"
+  );
 }
 
 async function readSession(request: NextRequest) {
