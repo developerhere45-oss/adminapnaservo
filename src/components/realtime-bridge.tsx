@@ -70,6 +70,7 @@ function eventLabel(eventName: string) {
     "support:ticket_updated": "Support ticket updated",
     "partner:registered": "New partner registered",
     "partner:updated": "Partner profile updated",
+    "review:created": "New partner rating submitted",
     "notification:created": "Notification created",
     "notification:scheduled": "Notification scheduled",
     "notification:sent": "Notification sent",
@@ -85,6 +86,7 @@ function eventDetail(eventName: string, payload: Record<string, unknown>) {
   if (eventName.startsWith("notification:")) return String(payload.title || payload.notificationId || payload.status || "Notification event received");
   if (eventName.startsWith("complaint:")) return String(payload.bookingCode || payload.reason || "Complaint event received");
   if (eventName.startsWith("user:")) return String(payload.name || payload.phone || payload.userId || "User event received");
+  if (eventName.startsWith("review:")) return String(payload.bookingCode || payload.partnerId || "Partner rating received");
   return "Live backend event received";
 }
 
@@ -115,6 +117,7 @@ const adminEvents = [
   "support:ticket_updated",
   "partner:registered",
   "partner:updated",
+  "review:created",
   "notification:created",
   "notification:scheduled",
   "notification:sent",
@@ -190,6 +193,8 @@ export function RealtimeBridge() {
             pushEvent(eventName, payload as Record<string, unknown>);
             queryClient.invalidateQueries({ queryKey: ["overview"] });
             queryClient.invalidateQueries({ queryKey: ["admin-resource"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-partner-profile"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-partner-profile-shell"] });
             queryClient.invalidateQueries({ queryKey: ["users-control-center"] });
             queryClient.invalidateQueries({ queryKey: ["admin-user"] });
             queryClient.invalidateQueries({ queryKey: ["support-ticket"] });

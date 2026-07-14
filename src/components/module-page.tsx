@@ -65,6 +65,7 @@ type PartnerProfilePayload = {
   documents: PartnerDocument[];
   supportTickets: ResourceRow[];
   bookingHistory: ResourceRow[];
+  reviewHistory: ResourceRow[];
   activityHistory: ResourceRow[];
 };
 type PartnerDetailTab = "Overview" | "Documents" | "History" | "Activity";
@@ -723,6 +724,8 @@ function PartnerDetailPanel({
     ["Kyc Status", partner.kycStatus],
     ["Trust Status", partner.trustStatus],
     ["Account Status", partner.accountStatus],
+    ["Average Rating", Number(partner.rating || 0) > 0 ? `${Number(partner.rating).toFixed(1)} / 5` : "No ratings yet"],
+    ["Customer Reviews", Number(partner.ratingCount || 0)],
   ];
 
   return (
@@ -1003,6 +1006,44 @@ function PartnerDetailPanel({
                       <p className="mt-1 text-xs font-semibold text-[#667085]">{formatDate(ticket.createdAt)}</p>
                     </Link>
                   ))}
+                </div>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-[#e6eaf2] bg-white shadow-sm xl:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f6] px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#fff5dc] text-[#f59e0b]"><Star size={18} /></span>
+                    <div>
+                      <h3 className="text-base font-black text-[#111827]">Customer Rating History</h3>
+                      <p className="mt-0.5 text-xs font-semibold text-[#667085]">Verified ratings submitted after completed bookings</p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-[#fff9e8] px-4 py-2 text-right">
+                    <p className="text-sm font-black text-[#b7791f]">{Number(partner.rating || 0) > 0 ? `${Number(partner.rating).toFixed(1)} / 5` : "No ratings"}</p>
+                    <p className="text-[11px] font-bold text-[#8a6a2f]">{Number(partner.ratingCount || 0)} customer reviews</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 p-4 md:grid-cols-2">
+                  {(data?.reviewHistory || []).length === 0 ? (
+                    <div className="rounded-lg bg-[#fbfcff] p-6 text-center text-sm font-bold text-[#667085] md:col-span-2">No customer ratings submitted yet.</div>
+                  ) : (data?.reviewHistory || []).map((review) => {
+                    const rating = Math.max(0, Math.min(5, Number(review.rating || 0)));
+                    return (
+                      <div key={String(review.id)} className="rounded-lg border border-[#edf0f6] p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <Link href={`/bookings/${encodeURIComponent(asText(review.bookingId))}`} className="text-xs font-black text-[#0b6df6] hover:underline">{asText(review.bookingCode || review.bookingId)}</Link>
+                            <p className="mt-1 text-sm font-black text-[#111827]">{asText(review.customerName || "Customer")}</p>
+                          </div>
+                          <Status value={asText(review.status || "published")} />
+                        </div>
+                        <div className="mt-3 flex gap-1" aria-label={`${rating} out of 5 stars`}>
+                          {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={17} className={star <= rating ? "fill-[#fbbf24] text-[#fbbf24]" : "text-[#d0d5dd]"} />)}
+                        </div>
+                        <p className="mt-3 text-xs font-semibold leading-5 text-[#475467]">{asText(review.comment || "No written feedback")}</p>
+                        <p className="mt-2 text-[11px] font-bold text-[#98a2b3]">{formatDate(review.createdAt)}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </section>
