@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession, requirePermission } from "@/lib/auth";
 import { fetchBackendJson } from "@/lib/backend";
+import { sanitizeAdminData } from "@/lib/data";
 
 export async function GET(_request: Request, context: { params: Promise<{ userId: string }> }) {
   const session = await getAdminSession();
@@ -10,7 +11,7 @@ export async function GET(_request: Request, context: { params: Promise<{ userId
   const { userId } = await context.params;
   try {
     const data = await fetchBackendJson(`/api/admin/users/${encodeURIComponent(userId)}`);
-    return NextResponse.json(data);
+    return NextResponse.json(sanitizeAdminData(data));
   } catch {
     return NextResponse.json({ message: "Live backend unavailable" }, { status: 502 });
   }

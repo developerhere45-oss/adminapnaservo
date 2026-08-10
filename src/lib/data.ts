@@ -8,6 +8,19 @@ function firstValue(...values: unknown[]) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") ?? "";
 }
 
+export function isEncryptedValue(value: unknown): value is string {
+  return typeof value === "string" && value.trim().toLowerCase().startsWith("enc:v1:");
+}
+
+export function sanitizeAdminData<T>(value: T): T {
+  if (isEncryptedValue(value)) return "Securely stored" as T;
+  if (Array.isArray(value)) return value.map((entry) => sanitizeAdminData(entry)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, sanitizeAdminData(entry)])) as T;
+  }
+  return value;
+}
+
 export function normalizeAdminRow(row: Row): Row {
   const customerName = firstValue(row.customerName, row.userName, row.fullName, row.ownerType === "user" ? row.ownerName : "", row.name);
   const customerPhone = firstValue(row.customerPhone, row.customerMobile, row.userMobile, row.mobileNumber, row.phone);
@@ -31,7 +44,7 @@ export function normalizeAdminRow(row: Row): Row {
 }
 
 function normalizePayload(payload: ResourcePayload): ResourcePayload {
-  return { ...payload, rows: Array.isArray(payload.rows) ? payload.rows.map(normalizeAdminRow) : [] };
+  return sanitizeAdminData({ ...payload, rows: Array.isArray(payload.rows) ? payload.rows.map(normalizeAdminRow) : [] });
 }
 
 export async function getOverview() {
@@ -46,7 +59,7 @@ export async function getOverview() {
   const completedCleaning = cleaningRows.filter((row) => String(row.status || "").toLowerCase() === "completed");
   const amount = (row: Row) => Number(row.finalServiceCost || row.amount || 0) || 0;
 
-  return {
+  return sanitizeAdminData({
     ...dashboard,
     recentBookings: Array.isArray(dashboard.recentBookings) ? dashboard.recentBookings.map((row) => normalizeAdminRow(row as Row)) : [],
     recentComplaints: Array.isArray(dashboard.recentComplaints) ? dashboard.recentComplaints.map((row) => normalizeAdminRow(row as Row)) : [],
@@ -60,7 +73,7 @@ export async function getOverview() {
       cleaningPending: cleaningRows.filter((row) => !["completed", "cancelled", "canceled"].includes(String(row.status || "").toLowerCase())).length,
       cleaningRevenue: completedCleaning.reduce((sum, row) => sum + amount(row), 0),
     },
-  };
+  });
 }
 
 export async function getResourceRows(resource: string, bearerToken?: string) {

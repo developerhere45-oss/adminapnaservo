@@ -138,6 +138,15 @@ function statusClass(value: string) {
   return "bg-[#eef2f6] text-[#475467]";
 }
 
+function hasCoordinates(location: UserRow["currentLocation"]) {
+  return Number.isFinite(Number(location?.lat)) && Number.isFinite(Number(location?.lng)) && (Number(location.lat) !== 0 || Number(location.lng) !== 0);
+}
+
+function coordinateLabel(location: UserRow["currentLocation"]) {
+  if (!hasCoordinates(location)) return "Location not available";
+  return `${Number(location.lat).toFixed(5)}, ${Number(location.lng).toFixed(5)}`;
+}
+
 function Status({ value }: { value: string }) {
   return <span className={cn("status-pill capitalize", statusClass(value || "unknown"))}>{(value || "Unknown").replace(/_/g, " ")}</span>;
 }
@@ -314,7 +323,10 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
         {initialTab === "users" ? (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1900px] text-left text-sm">
+              <table className="w-full min-w-[1500px] table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[190px]" /><col className="w-[135px]" /><col className="w-[190px]" /><col className="w-[150px]" /><col className="w-[150px]" /><col className="w-[115px]" /><col className="w-[90px]" /><col className="w-[90px]" /><col className="w-[280px]" /><col className="w-[230px]" /><col className="w-[75px]" />
+                </colgroup>
                 <thead className="bg-white text-xs text-[#667085]">
                   <tr>
                     {["User", "Mobile Number", "Email", "Registration Date & Time", "Last Login Time", "Account Status", "Total Bookings", "Complaints", "Current Location / Saved Addresses", "Device Information", "Action"].map((header) => <th key={header} className="px-4 py-4 font-bold">{header}</th>)}
@@ -337,11 +349,11 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
                       <td className="px-4 py-4"><Status value={user.accountStatus} /></td>
                       <td className="px-4 py-4 font-black">{user.totalBookings}</td>
                       <td className="px-4 py-4 font-black">{user.totalComplaintsRaised}</td>
-                      <td className="max-w-[360px] px-4 py-4">
-                        <p className="flex items-start gap-2 font-semibold"><MapPin size={16} className="mt-0.5 shrink-0 text-[#0b6df6]" />{user.savedAddressText || "No saved address"}</p>
-                        <p className="mt-1 text-xs text-[#667085]">{user.currentLocation.lat || 0}, {user.currentLocation.lng || 0}</p>
+                      <td className="px-4 py-4">
+                        <p className="flex items-start gap-2 font-semibold"><MapPin size={16} className="mt-0.5 shrink-0 text-[#0b6df6]" /><span className="line-clamp-2 break-words">{user.savedAddressText === "Securely stored" ? "Address securely stored" : user.savedAddressText || "No saved address"}</span></p>
+                        {hasCoordinates(user.currentLocation) ? <a className="mt-1 inline-block text-xs font-semibold text-[#0b6df6] hover:underline" href={`https://www.google.com/maps?q=${user.currentLocation.lat},${user.currentLocation.lng}`} target="_blank" rel="noreferrer">{coordinateLabel(user.currentLocation)} · Open map</a> : <p className="mt-1 text-xs text-[#667085]">Location not available</p>}
                       </td>
-                      <td className="max-w-[260px] px-4 py-4 text-[#475467]">{user.deviceInformation || "Not available"}</td>
+                      <td className="px-4 py-4 text-[#475467]"><span className="line-clamp-3 break-words leading-5">{user.deviceInformation || "Not available"}</span></td>
                       <td className="px-4 py-4"><Link href={`/users/${user.id}`} className="grid h-9 w-10 place-items-center rounded-lg border border-[#e6eaf2] bg-white text-[#0b6df6]" title="Open complete profile"><Eye size={16} /></Link></td>
                     </tr>
                   ))}
