@@ -15,6 +15,8 @@ import {
   MessageSquareText,
   RefreshCw,
   ShieldCheck,
+  Smartphone,
+  Sparkles,
   Users,
   WalletCards,
 } from "lucide-react";
@@ -54,6 +56,15 @@ type Overview = {
   recentPayments: Record<string, unknown>[];
   recentActivity?: ActivityItem[];
   paymentsSummary: Record<string, number>;
+  operationalBreakdown: {
+    iosDevices: number;
+    iosCustomerDevices: number;
+    iosPartnerDevices: number;
+    cleaningBookings: number;
+    cleaningCompleted: number;
+    cleaningPending: number;
+    cleaningRevenue: number;
+  };
 };
 
 type ActivityItem = {
@@ -102,6 +113,15 @@ const emptyOverview: Overview = {
   recentPayments: [],
   recentActivity: [],
   paymentsSummary: {},
+  operationalBreakdown: {
+    iosDevices: 0,
+    iosCustomerDevices: 0,
+    iosPartnerDevices: 0,
+    cleaningBookings: 0,
+    cleaningCompleted: 0,
+    cleaningPending: 0,
+    cleaningRevenue: 0,
+  },
 };
 
 async function fetchOverview(): Promise<Overview> {
@@ -482,6 +502,36 @@ export function DashboardClient() {
           emptyTitle="No payments yet"
           emptyText="Recent customer payments will appear here."
         />
+      </section>
+
+      <section className="mt-5 grid gap-5 xl:grid-cols-2">
+        <Link href="/devices" className="admin-card block p-5 transition hover:border-[#bfd5ff] hover:shadow-md">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="flex items-center gap-2 text-lg font-black"><Smartphone size={22} className="text-[#0b6df6]" />iOS Operations</p>
+              <p className="mt-1 text-sm font-medium text-[#667085]">All active iOS customer and partner devices</p>
+            </div>
+            <p className="text-3xl font-black text-[#0b6df6]">{formatNumber(data.operationalBreakdown.iosDevices)}</p>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[#eef5ff] p-4"><p className="text-xs font-bold text-[#667085]">Customer iOS</p><p className="mt-1 text-xl font-black">{formatNumber(data.operationalBreakdown.iosCustomerDevices)}</p></div>
+            <div className="rounded-xl bg-[#f3eaff] p-4"><p className="text-xs font-bold text-[#667085]">Partner iOS</p><p className="mt-1 text-xl font-black">{formatNumber(data.operationalBreakdown.iosPartnerDevices)}</p></div>
+          </div>
+        </Link>
+        <Link href="/bookings" className="admin-card block p-5 transition hover:border-[#b7ead3] hover:shadow-md">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="flex items-center gap-2 text-lg font-black"><Sparkles size={22} className="text-[#079455]" />Cleaning Operations</p>
+              <p className="mt-1 text-sm font-medium text-[#667085]">Cleaning bookings, progress and completed revenue</p>
+            </div>
+            <p className="text-3xl font-black text-[#079455]">{formatNumber(data.operationalBreakdown.cleaningBookings)}</p>
+          </div>
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            <div className="rounded-xl bg-[#e8f8ef] p-4"><p className="text-xs font-bold text-[#667085]">Completed</p><p className="mt-1 text-xl font-black">{formatNumber(data.operationalBreakdown.cleaningCompleted)}</p></div>
+            <div className="rounded-xl bg-[#fff4df] p-4"><p className="text-xs font-bold text-[#667085]">In progress</p><p className="mt-1 text-xl font-black">{formatNumber(data.operationalBreakdown.cleaningPending)}</p></div>
+            <div className="rounded-xl bg-[#eef5ff] p-4"><p className="text-xs font-bold text-[#667085]">Revenue</p><p className="mt-1 text-lg font-black">{formatMoney(data.operationalBreakdown.cleaningRevenue)}</p></div>
+          </div>
+        </Link>
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[.9fr_1fr]">

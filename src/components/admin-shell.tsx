@@ -8,9 +8,7 @@ import {
   CalendarDays,
   CalendarCheck,
   ChevronDown,
-  CircleHelp,
   FileText,
-  Headphones,
   Home,
   LogOut,
   Menu,
@@ -80,7 +78,7 @@ function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?
           <X size={20} />
         </button>
       )}
-      <nav className="space-y-1 px-4 py-6">
+      <nav className="h-[calc(100dvh-88px)] space-y-1 overflow-y-auto overscroll-contain px-4 py-6 pb-10 [scrollbar-gutter:stable]">
         {navItems.map((item) => {
           const href = `${base}${item.href}`;
           const active = pathname === href || (href !== `${base}/dashboard` && pathname.startsWith(`${href}/`));
@@ -103,21 +101,6 @@ function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?
           );
         })}
       </nav>
-      <div className="absolute bottom-6 left-4 right-4 rounded-xl border border-[#edf0f6] bg-white p-4">
-        <div className="flex gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-[#eef5ff] text-[#0b6df6]">
-            <Headphones size={20} />
-          </div>
-          <div>
-            <p className="text-sm font-black text-[#111827]">Need Help?</p>
-            <p className="mt-1 text-xs text-[#667085]">Contact our support team</p>
-          </div>
-        </div>
-        <button className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#f5f9ff] text-sm font-bold text-[#0b6df6]">
-          <CircleHelp size={16} />
-          Contact Support
-        </button>
-      </div>
     </aside>
   );
 }
