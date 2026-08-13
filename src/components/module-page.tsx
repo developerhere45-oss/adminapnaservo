@@ -67,8 +67,14 @@ type PartnerProfilePayload = {
   bookingHistory: ResourceRow[];
   reviewHistory: ResourceRow[];
   activityHistory: ResourceRow[];
+  staffActivity?: Array<{
+    staff: ResourceRow;
+    metrics?: { totalAssigned?: number; activeOrders?: number; completedOrders?: number };
+    assignedOrders?: ResourceRow[];
+    activityHistory?: ResourceRow[];
+  }>;
 };
-type PartnerDetailTab = "Overview" | "Documents" | "History" | "Activity";
+type PartnerDetailTab = "Overview" | "Staff" | "Documents" | "History" | "Activity";
 
 const metricIcons = [Users, CheckCircle2, Clock3, XCircle, CalendarCheck, IndianRupee, WalletCards, AlertTriangle, Star];
 const metricTones = [
@@ -141,6 +147,12 @@ function asText(value: unknown) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") return String(value);
   return String(value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function titleFromKey(key: string) {
@@ -679,6 +691,31 @@ function PartnerDetailPanel({
   });
 
   const partner = data?.partner || row;
+  const laundryBusiness = asRecord(partner.laundryBusiness);
+  const cleaningBusiness = asRecord(partner.cleaningBusiness || partner.companyBusiness || partner.business);
+  const staffActivity = data?.staffActivity || [];
+  const staffSources = [
+    partner.laundryStaffMembers,
+    laundryBusiness.staffMembers,
+    partner.cleaningStaffMembers,
+    partner.staffMembers,
+    cleaningBusiness.staffMembers,
+  ];
+  const rawStaff = staffSources.find(Array.isArray) as unknown[] | undefined;
+  const ownerStaff = (rawStaff?.length ? rawStaff.map(asRecord) : staffActivity.map((item) => asRecord(item.staff))).map((staff, index) => ({
+    ...staff,
+    sequence: staff.sequence || staff.staffSequence || index + 1,
+    name: staff.name || staff.fullName || staff.staffName,
+    phone: staff.phone || staff.mobileNumber || staff.mobile,
+    role: staff.role || staff.designation || staff.serviceRole,
+    verificationStatus: staff.verificationStatus || staff.kycStatus || staff.status,
+    isOnline: staff.isOnline ?? staff.available ?? staff.isAvailable ?? false,
+    photoUrl: staff.photoUrl || staff.profilePhoto || staff.avatarUrl,
+    idType: staff.idType || staff.identityType,
+    idNumber: staff.idNumber || staff.identityNumber,
+  })) as Record<string, unknown>[];
+  const businessType = asText(partner.businessType || partner.professionServiceCategory).toLowerCase();
+  const isOwnerCompany = businessType.includes("laundry") || businessType.includes("clean") || ownerStaff.length > 0;
   const approvalState = partnerApprovalState(partner);
   const docs = data?.documents || [];
   const profilePhoto = assetUrl(partner.profilePhoto, partner.photoUrl, partner.selfieUrl, row.profilePhoto);
@@ -716,6 +753,11 @@ function PartnerDetailPanel({
     ["Working Areas", partner.workingAreas],
     ["Service Area", partner.serviceArea],
     ["Languages Known", partner.languagesKnown],
+    ...(isOwnerCompany ? [
+      ["Business Type", partner.businessType || (businessType.includes("laundry") ? "Laundry" : "Cleaning")],
+      ["Business Verification Status", partner.businessVerificationStatus],
+      ["Total Staff Members", ownerStaff.length],
+    ] as Array<[string, unknown]> : []),
     ["Registration Date", partner.registrationDate],
     ["Current Verification Status", partner.currentVerificationStatus],
     ["Last Approved At", partner.approvedAt],
@@ -792,7 +834,10 @@ function PartnerDetailPanel({
           </div>
         </div>
         <div className="flex gap-2 border-b border-[#edf0f6] px-4 py-3 text-xs font-black">
-          {(["Overview", "Documents", "History", "Activity"] as PartnerDetailTab[]).map((tab) => (
+          {(isOwnerCompany
+            ? (["Overview", "Staff", "Documents", "History", "Activity"] as PartnerDetailTab[])
+            : (["Overview", "Documents", "History", "Activity"] as PartnerDetailTab[])
+          ).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -822,6 +867,42 @@ function PartnerDetailPanel({
               ))}
             </div>
           </section>
+
+          {activePartnerTab === "Staff" && (
+            <section className="space-y-4 xl:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#edf0f6] bg-white p-4">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#eef5ff] text-[#0b6df6]"><Users size={19} /></span>
+                  <div><h3 className="text-base font-black text-[#111827]">Owner Staff Details</h3><p className="mt-0.5 text-xs font-semibold text-[#667085]">All staff registered under this laundry or cleaning owner.</p></div>
+                </div>
+                <span className="rounded-full bg-[#eef5ff] px-3 py-1.5 text-xs font-black text-[#0b6df6]">{ownerStaff.length} staff members</span>
+              </div>
+              {ownerStaff.length === 0 ? (
+                <div className="grid min-h-[260px] place-items-center rounded-lg border border-[#edf0f6] bg-[#fbfcff] p-8 text-center"><div><Users className="mx-auto text-[#98a2b3]" size={42} /><p className="mt-4 text-sm font-black text-[#344054]">No staff registered</p><p className="mt-1 text-xs font-semibold text-[#667085]">Staff added by this owner will appear here.</p></div></div>
+              ) : ownerStaff.map((staff, index) => {
+                const activity = staffActivity.find((item) => Number(item.staff.sequence || item.staff.staffSequence) === Number(staff.sequence));
+                const metrics = activity?.metrics || {};
+                const fields: Array<[string, unknown]> = [
+                  ["Staff Number", staff.sequence], ["Full Name", staff.name], ["Mobile Number", staff.phone],
+                  ["Email", staff.email], ["Role", staff.role], ["Verification", staff.verificationStatus],
+                  ["Availability", staff.isOnline ? "Online / Available" : "Offline / Unavailable"], ["Last Login", staff.lastLoginAt],
+                  ["ID Type", staff.idType], ["ID Number", staff.idNumber], ["Firebase UID", staff.firebaseUid],
+                ];
+                return (
+                  <article key={`${asText(staff.sequence)}-${index}`} className="overflow-hidden rounded-xl border border-[#e6eaf2] bg-white shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#edf0f6] bg-[#fbfcff] p-4">
+                      <div className="flex items-center gap-3"><div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-[#fff0f4] font-black text-[#d92d4b]">{assetUrl(staff.photoUrl) ? <img src={assetUrl(staff.photoUrl)} alt="Staff" className="absolute inset-0 h-full w-full object-cover" /> : initials(staff.name)}</div><div><h4 className="text-sm font-black text-[#111827]">{asText(staff.name)}</h4><p className="mt-0.5 text-xs font-semibold text-[#667085]">{asText(staff.role)} · Staff #{asText(staff.sequence)}</p></div></div>
+                      <div className="flex gap-2"><Status value={asText(staff.verificationStatus)} /><Status value={staff.isOnline ? "Online" : "Offline"} /></div>
+                    </div>
+                    <div className="grid gap-4 p-4 xl:grid-cols-[1fr_320px]">
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{fields.map(([label, value]) => <div key={label} className="rounded-lg border border-[#edf0f6] p-3"><p className="text-[10px] font-black uppercase tracking-wide text-[#667085]">{label}</p><p className="mt-1 break-all text-xs font-black text-[#111827]">{label === "Last Login" ? formatDate(value) : formatValue(label, value)}</p></div>)}</div>
+                      <div className="grid grid-cols-3 gap-2 self-start">{[["Assigned", metrics.totalAssigned || 0], ["Active", metrics.activeOrders || 0], ["Completed", metrics.completedOrders || 0]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-[#f8fbff] p-3 text-center"><p className="text-lg font-black text-[#111827]">{value}</p><p className="text-[10px] font-black uppercase text-[#667085]">{label}</p></div>)}</div>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+          )}
 
           <section className={cn("rounded-lg border border-[#edf0f6]", activePartnerTab !== "Documents" && "hidden", activePartnerTab === "Documents" && "xl:col-span-2")}>
             <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-3">
