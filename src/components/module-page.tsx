@@ -796,7 +796,7 @@ function PartnerDetailPanel({
               </div>
               <div className="min-w-0">
                 <h2 className="text-lg font-black text-[#111827]">Partner Verification</h2>
-                <p className="mt-1 text-xs font-bold text-[#667085]">{asText(partner.partnerCode || row.code)} <Status value={asText(partner.currentVerificationStatus || row.approval)} /></p>
+                <p className="mt-1 text-xs font-bold text-[#667085]">{asText(partner.partnerId || partner.partnerCode || row.code)} <Status value={asText(partner.currentVerificationStatus || row.approval)} /></p>
                 <p className="mt-1 text-xs font-semibold text-[#667085]">Registration Date: {formatDate(partner.registrationDate || row.joinedAt)}</p>
               </div>
             </div>
