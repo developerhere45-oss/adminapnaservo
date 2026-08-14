@@ -363,10 +363,10 @@ function copyText(value: unknown) {
 function columnsFor(resource: string, rows: ResourceRow[]) {
   const known: Record<string, string[]> = {
     bookings: ["bookingCode", "userName", "userMobile", "serviceName", "partnerName", "bookingDateTime", "scheduledDateTime", "status", "finalServiceCost", "paymentStatus"],
-    partners: ["code", "name", "phone", "services", "city", "online", "totalBookings", "rating", "kyc", "trust", "status"],
+    partners: ["code", "name", "phone", "services", "city", "location", "online", "totalBookings", "rating", "kyc", "trust", "status"],
     devices: ["ownerType", "ownerName", "mobileNumber", "platform", "appType", "deviceId", "status", "lastUpdatedAt"],
     "partner-approvals": ["code", "name", "phone", "services", "city", "approval", "kyc", "trust", "joinedAt"],
-    payments: ["bookingCode", "userName", "partnerName", "amount", "currency", "status", "razorpayPaymentId", "createdAt"],
+    payments: ["paymentId", "bookingCode", "userName", "partnerName", "amount", "currency", "status", "razorpayPaymentId", "createdAt"],
     reports: ["reportType", "currentValue"],
   };
   if (known[resource]) return known[resource];
@@ -563,7 +563,7 @@ function DataTable({
                   const statusLike = ["status", "paymentStatus", "kyc", "trust", "priority", "approval"].includes(column);
                   return (
                     <td key={column} className="whitespace-pre-line px-5 py-3 font-medium text-[#263149]">
-                      {statusLike ? <Status value={value} /> : value}
+                      {column === "location" && row.mapUrl ? <a href={asText(row.mapUrl)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="font-bold text-[#0b6df6] hover:underline">{value}<span className="block text-xs">Open map</span></a> : statusLike ? <Status value={value} /> : value}
                     </td>
                   );
                 })}
@@ -752,6 +752,7 @@ function PartnerDetailPanel({
     ["Years Of Experience", partner.yearsOfExperience],
     ["Working Areas", partner.workingAreas],
     ["Service Area", partner.serviceArea],
+    ["Current Location", partner.currentLocation && typeof partner.currentLocation === "object" ? `${(partner.currentLocation as { lat?: number }).lat || 0}, ${(partner.currentLocation as { lng?: number }).lng || 0}` : partner.location],
     ["Languages Known", partner.languagesKnown],
     ...(isOwnerCompany ? [
       ["Business Type", partner.businessType || (businessType.includes("laundry") ? "Laundry" : "Cleaning")],
@@ -862,7 +863,7 @@ function PartnerDetailPanel({
               {detailRows.map(([label, value]) => (
                 <div key={String(label)} className="grid grid-cols-[155px_1fr] gap-3 px-4 py-3">
                   <span className="font-semibold text-[#667085]">{label}</span>
-                  <span className="break-words font-black text-[#111827]">{formatValue(String(label), value)}</span>
+                  <span className="break-words font-black text-[#111827]">{label === "Current Location" && partner.currentLocation && typeof partner.currentLocation === "object" && (Number((partner.currentLocation as { lat?: number }).lat) || Number((partner.currentLocation as { lng?: number }).lng)) ? <a href={`https://www.google.com/maps?q=${(partner.currentLocation as { lat?: number }).lat},${(partner.currentLocation as { lng?: number }).lng}`} target="_blank" rel="noreferrer" className="text-[#0b6df6] hover:underline">{formatValue(String(label), value)} · Open map</a> : formatValue(String(label), value)}</span>
                 </div>
               ))}
             </div>

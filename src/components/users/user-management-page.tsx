@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 
 type UserRow = {
   id: string;
+  userId: string;
   fullName: string;
   mobileNumber: string;
   email: string;
@@ -41,6 +42,7 @@ type UserRow = {
   savedAddresses: { id: string; label: string; address: string; city: string; isDefault: boolean }[];
   savedAddressText: string;
   deviceInformation: string;
+  devices: { deviceId: string; platform: string; osVersion: string; model: string; appVersion: string; lastActiveAt: string }[];
 };
 
 type SupportTicketRow = {
@@ -297,7 +299,7 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <label className="relative xl:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#667085]" size={16} />
-              <input className={cn(inputClass, "w-full pl-9")} placeholder="Name, mobile, booking ID or ticket ID" value={draftFilters.search} onChange={(event) => setDraftFilters({ ...draftFilters, search: event.target.value })} />
+              <input className={cn(inputClass, "w-full pl-9")} placeholder="User ID, name, mobile, email, booking or complaint ID" value={draftFilters.search} onChange={(event) => setDraftFilters({ ...draftFilters, search: event.target.value })} />
             </label>
             <input className={inputClass} placeholder="Full name" value={draftFilters.name} onChange={(event) => setDraftFilters({ ...draftFilters, name: event.target.value })} />
             <input className={inputClass} placeholder="Mobile number" value={draftFilters.mobile} onChange={(event) => setDraftFilters({ ...draftFilters, mobile: event.target.value })} />
@@ -323,19 +325,20 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
         {initialTab === "users" ? (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1500px] table-fixed text-left text-sm">
+              <table className="w-full min-w-[1620px] table-fixed text-left text-sm">
                 <colgroup>
-                  <col className="w-[190px]" /><col className="w-[135px]" /><col className="w-[190px]" /><col className="w-[150px]" /><col className="w-[150px]" /><col className="w-[115px]" /><col className="w-[90px]" /><col className="w-[90px]" /><col className="w-[280px]" /><col className="w-[230px]" /><col className="w-[75px]" />
+                  <col className="w-[115px]" /><col className="w-[190px]" /><col className="w-[135px]" /><col className="w-[190px]" /><col className="w-[150px]" /><col className="w-[150px]" /><col className="w-[115px]" /><col className="w-[90px]" /><col className="w-[90px]" /><col className="w-[280px]" /><col className="w-[230px]" /><col className="w-[75px]" />
                 </colgroup>
                 <thead className="bg-white text-xs text-[#667085]">
                   <tr>
-                    {["User", "Mobile Number", "Email", "Registration Date & Time", "Last Login Time", "Account Status", "Total Bookings", "Complaints", "Current Location / Saved Addresses", "Device Information", "Action"].map((header) => <th key={header} className="px-4 py-4 font-bold">{header}</th>)}
+                    {["User ID", "User", "Mobile Number", "Email", "Registration Date & Time", "Last Login Time", "Account Status", "Total Bookings", "Complaints", "Current Location / Saved Addresses", "Device Information", "Action"].map((header) => <th key={header} className="px-4 py-4 font-bold">{header}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.length === 0 && <tr><td colSpan={11} className="px-5 py-12 text-center font-semibold text-[#667085]">No users match the current filters.</td></tr>}
+                  {users.length === 0 && <tr><td colSpan={12} className="px-5 py-12 text-center font-semibold text-[#667085]">No users match the current filters.</td></tr>}
                   {users.map((user) => (
                     <tr key={user.id} className="border-t border-[#edf0f6] align-top hover:bg-[#f8fbff]">
+                      <td className="px-4 py-4 font-black text-[#0b6df6]">{user.userId || "Pending ID"}</td>
                       <td className="px-4 py-4">
                         <Link href={`/users/${user.id}`} className="flex items-center gap-3">
                           {user.profilePhoto ? <img src={user.profilePhoto} alt={user.fullName} className="h-10 w-10 rounded-full object-cover" /> : <span className="grid h-10 w-10 place-items-center rounded-full bg-[#eef5ff] text-xs font-black text-[#0b6df6]">{initials(user.fullName)}</span>}
@@ -353,7 +356,10 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
                         <p className="flex items-start gap-2 font-semibold"><MapPin size={16} className="mt-0.5 shrink-0 text-[#0b6df6]" /><span className="line-clamp-2 break-words">{user.savedAddressText === "Securely stored" ? "Address securely stored" : user.savedAddressText || "No saved address"}</span></p>
                         {hasCoordinates(user.currentLocation) ? <a className="mt-1 inline-block text-xs font-semibold text-[#0b6df6] hover:underline" href={`https://www.google.com/maps?q=${user.currentLocation.lat},${user.currentLocation.lng}`} target="_blank" rel="noreferrer">{coordinateLabel(user.currentLocation)} · Open map</a> : <p className="mt-1 text-xs text-[#667085]">Location not available</p>}
                       </td>
-                      <td className="px-4 py-4 text-[#475467]"><span className="line-clamp-3 break-words leading-5">{user.deviceInformation || "Not available"}</span></td>
+                      <td className="px-4 py-4 text-[#475467]">
+                        <span className="line-clamp-2 break-words font-semibold leading-5">{user.deviceInformation || "Not available"}</span>
+                        {user.devices?.[0]?.deviceId && <span className="mt-1 inline-flex rounded-md bg-[#eef5ff] px-2 py-1 text-[11px] font-black text-[#0b6df6]">{user.devices[0].deviceId}</span>}
+                      </td>
                       <td className="px-4 py-4"><Link href={`/users/${user.id}`} className="grid h-9 w-10 place-items-center rounded-lg border border-[#e6eaf2] bg-white text-[#0b6df6]" title="Open complete profile"><Eye size={16} /></Link></td>
                     </tr>
                   ))}

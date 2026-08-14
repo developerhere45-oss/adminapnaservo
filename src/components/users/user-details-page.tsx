@@ -50,13 +50,14 @@ type BookingHistory = {
 type UserDetails = {
   user: {
     id: string;
+    userId: string;
     fullName: string;
     mobileNumber: string;
     email: string;
     profilePhoto: string;
     address: string;
     city: string;
-    savedAddresses: { id: string; label: string; address: string; city: string; isDefault: boolean }[];
+    savedAddresses: { id: string; label: string; address: string; city: string; isDefault: boolean; location: { lat: number; lng: number } }[];
     currentLocation: { lat: number; lng: number };
     registrationDateTime: string;
     lastLoginTime: string;
@@ -67,11 +68,10 @@ type UserDetails = {
     accountStatus: string;
     rawAccountStatus: string;
     deviceInformation: string;
-    rawDeviceInformation: Record<string, unknown>;
+    devices: { deviceId: string; platform: string; osVersion: string; model: string; appVersion: string; lastActiveAt: string }[];
     registrationHistory: { source: string; provider: string; registeredAt: string; ip: string; userAgent: string }[];
     loginHistory: { loggedInAt: string; ip: string; userAgent: string; deviceInfo: Record<string, unknown> }[];
     adminNotes: { id: string; note: string; addedBy: string; addedAt: string }[];
-    rawProfile: Record<string, unknown>;
   } | null;
   bookingHistory: BookingHistory[];
   complaintHistory: Record<string, string | number | boolean | null | undefined>[];
@@ -85,13 +85,12 @@ type UserDetails = {
     lastUpdated: string;
   }[];
   paymentHistory: {
-    id: string;
+    paymentId: string;
     bookingId: string;
     amount: number;
     currency: string;
     status: string;
-    razorpayOrderId: string;
-    razorpayPaymentId: string;
+    providerReference: string;
     createdAt: string;
   }[];
 };
@@ -114,6 +113,10 @@ function formatDateTime(value: string) {
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return (parts[0]?.[0] || "U") + (parts[1]?.[0] || "");
+}
+
+function mapUrl(location: { lat: number; lng: number }) {
+  return Number(location?.lat) || Number(location?.lng) ? `https://www.google.com/maps?q=${location.lat},${location.lng}` : "";
 }
 
 function Badge({ value }: { value: string }) {
@@ -214,6 +217,7 @@ export function UserDetailsPage({ userId }: { userId: string }) {
             <div>
               <h1 className="text-3xl font-black tracking-[-0.04em] sm:text-4xl">{user.fullName || "ApnaServo Customer"}</h1>
               <div className="mt-2 flex flex-wrap gap-3 text-sm font-bold text-[#756a70]">
+                <span className="rounded-lg bg-[#fff0f4] px-2 py-1 text-[#f32368]">{user.userId || "Pending ID"}</span>
                 <span className="inline-flex items-center gap-2"><Phone size={16} />{user.mobileNumber || "No mobile"}</span>
                 <span className="inline-flex items-center gap-2"><Mail size={16} />{user.email || "No email"}</span>
                 <Badge value={user.accountStatus} />
@@ -227,6 +231,7 @@ export function UserDetailsPage({ userId }: { userId: string }) {
       <section className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
         <Panel title="Complete Profile" icon={UserRound}>
           <div className="grid gap-4 md:grid-cols-2">
+            <Field label="User ID" value={user.userId || "Pending migration"} />
             <Field label="Mobile number" value={user.mobileNumber} />
             <Field label="Email" value={user.email || "Not available"} />
             <Field label="Primary address" value={user.address} />
@@ -235,8 +240,8 @@ export function UserDetailsPage({ userId }: { userId: string }) {
             <Field label="Last login time" value={formatDateTime(user.lastLoginTime)} />
             <Field label="Phone verified" value={user.phoneVerified ? `Yes, ${formatDateTime(user.phoneVerifiedAt)}` : "No"} />
             <Field label="Booking risk" value={`${user.bookingRiskStatus || "unknown"} (${user.fakeBookingWarningCount || 0} warnings)`} />
-            <Field label="Current location" value={`${user.currentLocation.lat}, ${user.currentLocation.lng}`} />
-            <Field label="Device information" value={user.deviceInformation || JSON.stringify(user.rawDeviceInformation || {})} />
+            <Field label="Current location" value={mapUrl(user.currentLocation) ? <a href={mapUrl(user.currentLocation)} target="_blank" rel="noreferrer" className="text-[#0b6df6] hover:underline">{user.currentLocation.lat.toFixed(5)}, {user.currentLocation.lng.toFixed(5)} · Open map</a> : "Location not available"} />
+            <Field label="Device information" value={user.deviceInformation || "Not available"} />
           </div>
         </Panel>
 
@@ -278,6 +283,7 @@ export function UserDetailsPage({ userId }: { userId: string }) {
                 <p className="text-sm font-black text-[#2a1420]">{address.label}{address.isDefault ? " - Default" : ""}</p>
                 <p className="mt-2 text-sm text-[#756a70]">{address.address}</p>
                 <p className="mt-1 text-xs font-bold text-[#8c7a82]">{address.city}</p>
+                {mapUrl(address.location) && <a href={mapUrl(address.location)} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-black text-[#0b6df6] hover:underline">Open map</a>}
               </div>
             ))
           )}
@@ -374,13 +380,14 @@ export function UserDetailsPage({ userId }: { userId: string }) {
         <Panel title="Payment History" icon={CreditCard}>
           <div className="space-y-3">
             {data.paymentHistory.length === 0 ? <p className="text-sm font-semibold text-[#756a70]">No payments recorded.</p> : data.paymentHistory.map((payment) => (
-              <div key={payment.id} className="rounded-2xl border border-[#f4dce4] bg-[#fffafa] p-4">
+              <div key={payment.paymentId} className="rounded-2xl border border-[#f4dce4] bg-[#fffafa] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-black">{formatCurrency(payment.amount || 0)}</p>
                   <Badge value={payment.status} />
                 </div>
-                <p className="mt-2 text-sm text-[#756a70]">Booking {payment.bookingId}</p>
-                <p className="mt-1 text-xs font-semibold text-[#8c7a82]">{payment.razorpayPaymentId || payment.razorpayOrderId || "Gateway reference not recorded"}</p>
+                <p className="mt-2 text-sm font-black text-[#f32368]">{payment.paymentId || "Pending payment ID"}</p>
+                <p className="mt-1 text-sm text-[#756a70]">Booking {payment.bookingId}</p>
+                <p className="mt-1 text-xs font-semibold text-[#8c7a82]">Provider reference: {payment.providerReference || "Not recorded"}</p>
               </div>
             ))}
           </div>
@@ -404,10 +411,17 @@ export function UserDetailsPage({ userId }: { userId: string }) {
         </Panel>
       </section>
 
-      <Panel title="Device & Raw Profile" icon={Smartphone}>
-        <pre className="max-h-[360px] overflow-auto rounded-2xl bg-[#181018] p-4 text-xs leading-6 text-white">
-          {JSON.stringify({ deviceInfo: user.rawDeviceInformation, profile: user.rawProfile }, null, 2)}
-        </pre>
+      <Panel title="Devices" icon={Smartphone}>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {(user.devices || []).length === 0 ? <p className="text-sm font-semibold text-[#756a70]">No active device recorded.</p> : (user.devices || []).map((device) => (
+            <div key={device.deviceId} className="rounded-2xl border border-[#f4dce4] bg-[#fffafa] p-4">
+              <p className="font-black text-[#f32368]">{device.deviceId}</p>
+              <p className="mt-2 text-sm font-bold capitalize">{device.platform || "Unknown platform"} {device.osVersion}</p>
+              <p className="mt-1 text-sm text-[#756a70]">{device.model || "Model not recorded"}</p>
+              <p className="mt-1 text-xs font-semibold text-[#8c7a82]">App {device.appVersion || "version unavailable"} · Last active {formatDateTime(device.lastActiveAt)}</p>
+            </div>
+          ))}
+        </div>
       </Panel>
     </div>
   );
