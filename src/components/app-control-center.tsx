@@ -84,6 +84,15 @@ type ServiceSummary = {
   availabilityStartsAt?: string;
   availabilityEndsAt?: string;
 };
+type FeatureDefinition = {
+  featureId: string;
+  name: string;
+  description: string;
+  platform: "all" | "android" | "ios";
+  minimumAppVersion?: string;
+  dependencies?: string[];
+  implementationState: "active" | "implementation_not_found";
+};
 const defaults: ControlConfig = {
   appStatus: { mode: "LIVE", title: "", message: "", bookingEnabled: true },
   launch: {
@@ -123,11 +132,6 @@ const serviceStates = [
   "TEMPORARILY_UNAVAILABLE",
   "COMING_SOON",
   "DISABLED",
-];
-const knownFeatures = [
-  "home_banners",
-  "booking_history",
-  "commercial_services",
 ];
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -199,6 +203,7 @@ export function AppControlCenter() {
         version: number;
         counts: { announcements: number; banners: number; auditLogs: number };
         services: ServiceSummary[];
+        features: FeatureDefinition[];
       }>(""),
   });
   useEffect(() => {
@@ -508,6 +513,7 @@ export function AppControlCenter() {
       {tab === "features" && (
         <FeatureControls
           config={config}
+          definitions={overview.data?.features || []}
           onChange={(features) => setSection("features", features)}
         />
       )}
@@ -843,16 +849,22 @@ function ServiceControls({
 }
 function FeatureControls({
   config,
+  definitions,
   onChange,
 }: {
   config: ControlConfig;
+  definitions: FeatureDefinition[];
   onChange: (value: ControlConfig["features"]) => void;
 }) {
-  const [selected, setSelected] = useState(knownFeatures[0]);
-  const enabled = knownFeatures.filter(
-    (name) => config.features[name]?.enabled,
+  const [selected, setSelected] = useState("");
+  const selectedDefinition =
+    definitions.find((feature) => feature.featureId === selected) ||
+    definitions[0];
+  const selectedId = selectedDefinition?.featureId || "";
+  const enabled = definitions.filter(
+    (feature) => config.features[feature.featureId]?.enabled,
   ).length;
-  const feature = config.features[selected] || {
+  const feature = config.features[selectedId] || {
     enabled: false,
     audience: "all",
     description: "",
@@ -868,9 +880,9 @@ function FeatureControls({
       </header>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ["Configured", knownFeatures.length],
+          ["Configured", definitions.length],
           ["Enabled", enabled],
-          ["Disabled", knownFeatures.length - enabled],
+          ["Disabled", definitions.length - enabled],
           [
             "Scheduled",
             Object.values(config.features).filter(
@@ -899,18 +911,23 @@ function FeatureControls({
                 </tr>
               </thead>
               <tbody>
-                {knownFeatures.map((name) => {
-                  const item = config.features[name] || {
+                {definitions.map((definition) => {
+                  const item = config.features[definition.featureId] || {
                     enabled: false,
                     audience: "all",
                     description: "",
                   };
                   return (
-                    <tr key={name} className="border-t border-[#edf0f6]">
+                    <tr
+                      key={definition.featureId}
+                      className="border-t border-[#edf0f6]"
+                    >
                       <td className="px-5 py-4">
-                        <p className="font-black">{name}</p>
+                        <p className="font-black">{definition.name}</p>
                         <p className="mt-1 text-xs text-[#667085]">
-                          {item.description || "No description configured"}
+                          {item.description ||
+                            definition.description ||
+                            "No description configured"}
                         </p>
                       </td>
                       <td className="px-5 py-4">
@@ -920,7 +937,7 @@ function FeatureControls({
                           onChange={(enabled) =>
                             onChange({
                               ...config.features,
-                              [name]: { ...item, enabled },
+                              [definition.featureId]: { ...item, enabled },
                             })
                           }
                         />
@@ -930,7 +947,7 @@ function FeatureControls({
                       </td>
                       <td className="px-5 py-4">
                         <button
-                          onClick={() => setSelected(name)}
+                          onClick={() => setSelected(definition.featureId)}
                           className="rounded-lg border border-[#e6eaf2] px-3 py-2 text-xs font-black"
                         >
                           Edit
@@ -944,7 +961,9 @@ function FeatureControls({
           </div>
         </div>
         <aside className="admin-card h-fit p-5">
-          <h3 className="text-lg font-black">{selected}</h3>
+          <h3 className="text-lg font-black">
+            {selectedDefinition?.name || "Feature details"}
+          </h3>
           <div className="mt-4 space-y-4">
             <Toggle
               label={feature.enabled ? "Enabled" : "Disabled"}
@@ -952,7 +971,7 @@ function FeatureControls({
               onChange={(enabled) =>
                 onChange({
                   ...config.features,
-                  [selected]: { ...feature, enabled },
+                  [selectedId]: { ...feature, enabled },
                 })
               }
             />
@@ -966,7 +985,7 @@ function FeatureControls({
                 onChange={(event) =>
                   onChange({
                     ...config.features,
-                    [selected]: { ...feature, audience: event.target.value },
+                    [selectedId]: { ...feature, audience: event.target.value },
                   })
                 }
               >
@@ -983,7 +1002,10 @@ function FeatureControls({
                 onChange={(event) =>
                   onChange({
                     ...config.features,
-                    [selected]: { ...feature, description: event.target.value },
+                    [selectedId]: {
+                      ...feature,
+                      description: event.target.value,
+                    },
                   })
                 }
               />
