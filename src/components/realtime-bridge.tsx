@@ -75,6 +75,8 @@ function eventLabel(eventName: string) {
     "notification:scheduled": "Notification scheduled",
     "notification:sent": "Notification sent",
     "notification:deleted": "Notification deleted",
+    "app_control:draft_saved": "App-control draft saved",
+    "app_control:published": "App configuration published",
   };
   return labels[eventName] || eventName;
 }
@@ -125,6 +127,8 @@ const adminEvents = [
   "partner:online",
   "partner:offline",
   "partner:location_update",
+  "app_control:draft_saved",
+  "app_control:published",
 ];
 
 export function RealtimeBridge() {
@@ -200,6 +204,9 @@ export function RealtimeBridge() {
             queryClient.invalidateQueries({ queryKey: ["support-ticket"] });
             queryClient.invalidateQueries({ queryKey: ["booking-timeline"] });
             queryClient.invalidateQueries({ queryKey: ["admin-activity"] });
+            queryClient.invalidateQueries({ queryKey: ["app-control-overview"] });
+            queryClient.invalidateQueries({ queryKey: ["app-control-items"] });
+            queryClient.invalidateQueries({ queryKey: ["app-control-audit"] });
           });
         }
       } catch {

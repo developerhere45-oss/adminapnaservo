@@ -92,6 +92,7 @@ type FeatureDefinition = {
   minimumAppVersion?: string;
   dependencies?: string[];
   implementationState: "active" | "implementation_not_found";
+  remoteConfigSupported?: boolean;
 };
 const defaults: ControlConfig = {
   appStatus: { mode: "LIVE", title: "", message: "", bookingEnabled: true },
@@ -149,17 +150,20 @@ function Toggle({
   value,
   onChange,
   label,
+  disabled = false,
 }: {
   value: boolean;
   onChange: (value: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-3 text-sm font-bold">
+    <label className={cn("flex items-center gap-3 text-sm font-bold", disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer")}>
       <button
         type="button"
         role="switch"
         aria-checked={value}
+        disabled={disabled}
         onClick={() => onChange(!value)}
         className={cn(
           "relative h-6 w-11 rounded-full transition",
@@ -179,6 +183,8 @@ function Toggle({
 }
 
 export function AppControlCenter() {
+  const [selectedApp, setSelectedApp] = useState<"customer" | "partner">("customer");
+  const [queryLoaded, setQueryLoaded] = useState(false);
   const [tab, setTab] = useState<
     | "status"
     | "launch"
@@ -194,32 +200,47 @@ export function AppControlCenter() {
   const [editing, setEditing] = useState<Item | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const controlPath = (path: string) => `${path}${path.includes("?") ? "&" : "?"}app=${selectedApp}`;
+  useEffect(() => {
+    if (!queryLoaded) {
+      const requested = new URLSearchParams(window.location.search).get("app");
+      setQueryLoaded(true);
+      if (requested === "partner") setSelectedApp("partner");
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("app", selectedApp);
+    window.history.replaceState({}, "", url);
+    setEditing(null);
+    setSearch("");
+    if (selectedApp === "partner" && ["launch", "services", "banners"].includes(tab)) setTab("status");
+  }, [selectedApp, tab, queryLoaded]);
   const overview = useQuery({
-    queryKey: ["app-control-overview"],
+    queryKey: ["app-control-overview", selectedApp],
     queryFn: () =>
       api<{
         draft: ControlConfig;
         published: ControlConfig;
         version: number;
-        counts: { announcements: number; banners: number; auditLogs: number };
+        counts: { announcements: number; banners: number; auditLogs: number; activePartners?: number };
         services: ServiceSummary[];
         features: FeatureDefinition[];
-      }>(""),
+      }>(controlPath("")),
   });
   useEffect(() => {
     if (overview.data?.draft) setDraft(overview.data.draft);
   }, [overview.data?.draft]);
   const current = overview.data?.draft || defaults;
   const items = useQuery({
-    queryKey: ["app-control-items", tab, search],
+    queryKey: ["app-control-items", selectedApp, tab, search],
     queryFn: () =>
       api<{ items: Item[] }>(
-        `/${tab === "announcements" ? "announcement" : "banner"}?search=${encodeURIComponent(search)}`,
+        controlPath(`/${tab === "announcements" ? "announcement" : "banner"}?search=${encodeURIComponent(search)}`),
       ),
     enabled: tab === "announcements" || tab === "banners",
   });
   const audit = useQuery({
-    queryKey: ["app-control-audit"],
+    queryKey: ["app-control-audit", selectedApp],
     queryFn: () =>
       api<{
         logs: Array<{
@@ -229,46 +250,46 @@ export function AppControlCenter() {
           actorName: string;
           createdAt: string;
         }>;
-      }>("/audit-logs"),
+      }>(controlPath("/audit-logs")),
     enabled: tab === "audit",
   });
   const save = useMutation({
     mutationFn: ({ section, value }: { section: string; value: unknown }) =>
-      api<{ draft: ControlConfig }>("/draft", {
+      api<{ draft: ControlConfig }>(controlPath("/draft"), {
         method: "PATCH",
         body: JSON.stringify({ section, value }),
       }),
     onSuccess: (result) => {
       setDraft(result.draft);
       setMessage("Draft saved. Publish when ready.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
   const publish = useMutation({
-    mutationFn: () => api<{ ok: boolean }>("/publish", { method: "POST" }),
+    mutationFn: () => api<{ ok: boolean }>(controlPath("/publish"), { method: "POST" }),
     onSuccess: () => {
-      setMessage("Published to customer configuration.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview"] });
-      queryClient.invalidateQueries({ queryKey: ["app-control-audit"] });
+      setMessage(`Published to ${selectedApp} configuration.`);
+      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-audit", selectedApp] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
   const openBookings = useMutation({
     mutationFn: () =>
-      api<{ published: ControlConfig }>("/open-bookings", { method: "POST" }),
+      api<{ published: ControlConfig }>(controlPath("/open-bookings"), { method: "POST" }),
     onSuccess: (result) => {
       setDraft(result.published);
       setMessage("Launch screen removed. Customer booking flow is now live.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview"] });
-      queryClient.invalidateQueries({ queryKey: ["app-control-audit"] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-audit", selectedApp] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
   const content = useMutation({
     mutationFn: ({ method, item }: { method: string; item: Partial<Item> }) =>
       api<{ ok?: boolean; item?: Item }>(
-        `/${item.kind}${item._id ? `/${item._id}` : ""}`,
+        controlPath(`/${item.kind}${item._id ? `/${item._id}` : ""}`),
         {
           method,
           body: method === "DELETE" ? undefined : JSON.stringify(item),
@@ -277,8 +298,8 @@ export function AppControlCenter() {
     onSuccess: () => {
       setEditing(null);
       setMessage("Content saved.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-items"] });
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-items", selectedApp] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
@@ -289,6 +310,9 @@ export function AppControlCenter() {
     save.mutate({ section, value });
   };
   const displayedItems = useMemo(() => items.data?.items || [], [items.data]);
+  const tabs: Array<typeof tab> = selectedApp === "partner"
+    ? ["status", "features", "updates", "announcements", "audit"]
+    : ["status", "launch", "services", "features", "updates", "announcements", "banners", "audit"];
   const input =
     "h-10 w-full rounded-lg border border-[#e6eaf2] bg-white px-3 text-sm outline-none focus:border-[#f32368]";
   return (
@@ -296,13 +320,15 @@ export function AppControlCenter() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold text-[#f32368]">App Control Center</p>
-          <h1 className="mt-1 text-3xl font-black">Customer App Controls</h1>
+          <h1 className="mt-1 text-3xl font-black">{selectedApp === "partner" ? "Partner App Controls" : "Customer App Controls"}</h1>
           <p className="mt-1 text-sm text-[#667085]">
-            Draft → preview → publish. Customer devices use the last valid
-            published configuration offline.
+            Draft → preview → publish. {selectedApp === "partner" ? "Partner" : "Customer"} devices use the last valid published configuration offline.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex rounded-lg border border-[#e6eaf2] bg-white p-1 text-sm font-bold">
+            {(["customer", "partner"] as const).map((app) => <button key={app} onClick={() => setSelectedApp(app)} className={cn("rounded-md px-3 py-2 capitalize", selectedApp === app && "bg-[#fff0f4] text-[#bd1749]")}>{app} app</button>)}
+          </div>
           <button
             onClick={() => overview.refetch()}
             className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#e6eaf2] bg-white px-4 text-sm font-bold"
@@ -329,7 +355,7 @@ export function AppControlCenter() {
         {[
           ["Published version", overview.data?.version || 0, ShieldCheck],
           ["Announcements", overview.data?.counts.announcements || 0, Bell],
-          ["Banners", overview.data?.counts.banners || 0, Megaphone],
+          [selectedApp === "partner" ? "Active partners" : "Banners", selectedApp === "partner" ? overview.data?.counts.activePartners || 0 : overview.data?.counts.banners || 0, Megaphone],
           ["Audit actions", overview.data?.counts.auditLogs || 0, MonitorCog],
         ].map(([label, value, Icon]) => {
           const C = Icon as typeof ShieldCheck;
@@ -345,18 +371,7 @@ export function AppControlCenter() {
         })}
       </section>
       <nav className="flex max-w-full gap-1 overflow-x-auto border-b border-[#edf0f6]">
-        {(
-          [
-            "status",
-            "launch",
-            "services",
-            "features",
-            "updates",
-            "announcements",
-            "banners",
-            "audit",
-          ] as const
-        ).map((name) => (
+        {tabs.map((name) => (
           <button
             key={name}
             onClick={() => setTab(name)}
@@ -931,16 +946,13 @@ function FeatureControls({
                         </p>
                       </td>
                       <td className="px-5 py-4">
-                        <Toggle
+                        {definition.remoteConfigSupported === false ? (
+                          <span className="text-xs font-bold text-[#667085]">App integration required</span>
+                        ) : <Toggle
                           label={item.enabled ? "Enabled" : "Disabled"}
                           value={item.enabled}
-                          onChange={(enabled) =>
-                            onChange({
-                              ...config.features,
-                              [definition.featureId]: { ...item, enabled },
-                            })
-                          }
-                        />
+                          onChange={(enabled) => onChange({ ...config.features, [definition.featureId]: { ...item, enabled } })}
+                        />}
                       </td>
                       <td className="px-5 py-4 capitalize">
                         {item.audience.replace(/_/g, " ")}
@@ -964,10 +976,12 @@ function FeatureControls({
           <h3 className="text-lg font-black">
             {selectedDefinition?.name || "Feature details"}
           </h3>
+          {selectedDefinition?.remoteConfigSupported === false && <p className="mt-2 rounded-lg bg-[#fff6e8] p-3 text-xs font-bold text-[#9a6700]">This genuine partner-app feature needs the next signed AAB to consume remote configuration. It is intentionally not a fake admin toggle.</p>}
           <div className="mt-4 space-y-4">
             <Toggle
               label={feature.enabled ? "Enabled" : "Disabled"}
               value={feature.enabled}
+              disabled={selectedDefinition?.remoteConfigSupported === false}
               onChange={(enabled) =>
                 onChange({
                   ...config.features,
@@ -1222,18 +1236,8 @@ function ContentManager({
                         <Pencil size={14} />
                       </button>
                       <button
-                        onClick={() =>
-                          mutation.mutate({
-                            method: "PATCH",
-                            item: {
-                              ...item,
-                              status:
-                                item.status === "published"
-                                  ? "disabled"
-                                  : "published",
-                            },
-                          })
-                        }
+                        title="Preview or edit this draft"
+                        onClick={() => setEditing(item)}
                         className="grid h-8 w-8 place-items-center rounded border border-[#e6eaf2]"
                       >
                         <Eye size={14} />
@@ -1315,15 +1319,9 @@ function ContentManager({
                 }
               />
             </label>
-            <select
-              className={input}
-              value={active.status}
-              onChange={(e) => update({ status: e.target.value })}
-            >
-              {["draft", "scheduled", "published", "disabled"].map((status) => (
-                <option key={status}>{status}</option>
-              ))}
-            </select>
+            <p className="rounded-lg bg-[#fff5f7] p-3 text-xs font-bold text-[#bd1749]">
+              This content stays a draft until the top-level Publish changes action is confirmed.
+            </p>
             <input
               className={input}
               type="number"
