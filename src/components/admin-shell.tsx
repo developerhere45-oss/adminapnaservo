@@ -42,6 +42,7 @@ const navItems = [
   { href: "/payments", label: "Payments & Finance", icon: WalletCards },
   { href: "/bookings", label: "Bookings", icon: CalendarCheck },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/app-control", label: "App Control Center", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/logout", label: "Logout", icon: LogOut },
 ];
