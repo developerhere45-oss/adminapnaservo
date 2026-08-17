@@ -46,7 +46,7 @@ type ControlConfig = {
     buttonText: string;
     storeUrl: string;
   };
-  ui: { homeTitle: string; homeSubtitle: string; primaryColor: string };
+  ui: { homeTitle: string; homeSubtitle: string; primaryColor: string; hiddenSections: string[] };
   features: Record<
     string,
     {
@@ -117,7 +117,7 @@ const defaults: ControlConfig = {
     buttonText: "Update now",
     storeUrl: "",
   },
-  ui: { homeTitle: "", homeSubtitle: "", primaryColor: "#f32368" },
+  ui: { homeTitle: "", homeSubtitle: "", primaryColor: "#f32368", hiddenSections: [] },
   features: {},
   services: {},
 };
@@ -544,6 +544,7 @@ export function AppControlCenter() {
             <div className="mt-5 grid gap-3">
               <label className="text-xs font-bold text-[#667085]">Home headline<input className={cn(input, "mt-1")} value={config.ui.homeTitle} placeholder={selectedApp === "partner" ? "Welcome back" : "Trusted home services"} onChange={(e) => setDraft({ ...config, ui: { ...config.ui, homeTitle: e.target.value } })} onBlur={() => setSection("ui", draft.ui)} /></label>
               <label className="text-xs font-bold text-[#667085]">Home subtitle<input className={cn(input, "mt-1")} value={config.ui.homeSubtitle} placeholder="A short message shown in the home experience" onChange={(e) => setDraft({ ...config, ui: { ...config.ui, homeSubtitle: e.target.value } })} onBlur={() => setSection("ui", draft.ui)} /></label>
+              <div className="rounded-lg border border-[#e6eaf2] p-3"><p className="text-xs font-bold text-[#667085]">Visible home sections</p><div className="mt-2 flex flex-wrap gap-2">{(selectedApp === "partner" ? ["online", "stats", "recent_requests"] : ["hero", "announcements", "quick_services", "commercial", "popular_services", "more_services", "feature_strip"]).map((section) => <label key={section} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!config.ui.hiddenSections.includes(section)} onChange={(e) => { const hiddenSections = e.target.checked ? config.ui.hiddenSections.filter((item) => item !== section) : [...config.ui.hiddenSections, section]; setSection("ui", { ...config.ui, hiddenSections }); }} />{section.replace(/_/g, " ")}</label>)}</div></div>
             </div>
           </div>
           <aside className="admin-card h-fit border-t-4 border-[#f32368] p-5"><p className="text-xs font-bold text-[#667085]">Draft preview</p><h3 className="mt-3 text-xl font-black">{config.ui.homeTitle || (selectedApp === "partner" ? "Welcome back" : "Home services at your doorstep")}</h3><p className="mt-2 text-sm text-[#667085]">{config.ui.homeSubtitle || "Your published app content will appear here."}</p></aside>
