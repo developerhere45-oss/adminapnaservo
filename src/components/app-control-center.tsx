@@ -46,6 +46,7 @@ type ControlConfig = {
     buttonText: string;
     storeUrl: string;
   };
+  ui: { homeTitle: string; homeSubtitle: string; primaryColor: string };
   features: Record<
     string,
     {
@@ -116,6 +117,7 @@ const defaults: ControlConfig = {
     buttonText: "Update now",
     storeUrl: "",
   },
+  ui: { homeTitle: "", homeSubtitle: "", primaryColor: "#f32368" },
   features: {},
   services: {},
 };
@@ -198,6 +200,7 @@ export function AppControlCenter() {
     | "services"
     | "features"
     | "updates"
+    | "ui"
     | "announcements"
     | "banners"
     | "audit"
@@ -318,8 +321,8 @@ export function AppControlCenter() {
   };
   const displayedItems = useMemo(() => items.data?.items || [], [items.data]);
   const tabs: Array<typeof tab> = selectedApp === "partner"
-    ? ["status", "features", "updates", "announcements", "audit"]
-    : ["status", "launch", "services", "features", "updates", "announcements", "banners", "audit"];
+    ? ["status", "ui", "features", "updates", "announcements", "audit"]
+    : ["status", "launch", "services", "ui", "features", "updates", "announcements", "banners", "audit"];
   const input =
     "h-10 w-full rounded-lg border border-[#e6eaf2] bg-white px-3 text-sm outline-none focus:border-[#f32368]";
   return (
@@ -532,6 +535,19 @@ export function AppControlCenter() {
           services={overview.data?.services || []}
           onChange={(services) => setSection("services", services)}
         />
+      )}
+      {tab === "ui" && (
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
+          <div className="admin-card p-5">
+            <h2 className="text-xl font-black">Remote UI Manager</h2>
+            <p className="mt-1 text-sm text-[#667085]">Safely change supported copy and the accent color. These fields update the real selected app after Publish; native screens and code cannot be uploaded here.</p>
+            <div className="mt-5 grid gap-3">
+              <label className="text-xs font-bold text-[#667085]">Home headline<input className={cn(input, "mt-1")} value={config.ui.homeTitle} placeholder={selectedApp === "partner" ? "Welcome back" : "Trusted home services"} onChange={(e) => setDraft({ ...config, ui: { ...config.ui, homeTitle: e.target.value } })} onBlur={() => setSection("ui", draft.ui)} /></label>
+              <label className="text-xs font-bold text-[#667085]">Home subtitle<input className={cn(input, "mt-1")} value={config.ui.homeSubtitle} placeholder="A short message shown in the home experience" onChange={(e) => setDraft({ ...config, ui: { ...config.ui, homeSubtitle: e.target.value } })} onBlur={() => setSection("ui", draft.ui)} /></label>
+            </div>
+          </div>
+          <aside className="admin-card h-fit border-t-4 border-[#f32368] p-5"><p className="text-xs font-bold text-[#667085]">Draft preview</p><h3 className="mt-3 text-xl font-black">{config.ui.homeTitle || (selectedApp === "partner" ? "Welcome back" : "Home services at your doorstep")}</h3><p className="mt-2 text-sm text-[#667085]">{config.ui.homeSubtitle || "Your published app content will appear here."}</p></aside>
+        </section>
       )}
       {tab === "features" && (
         <FeatureControls
