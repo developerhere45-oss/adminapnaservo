@@ -126,6 +126,13 @@ const modes = [
   "MAINTENANCE",
   "TEMPORARILY_UNAVAILABLE",
 ];
+const modeDetails: Record<string, { label: string; description: string }> = {
+  LIVE: { label: "Live", description: "Everything is available and customers can continue normally." },
+  COMING_SOON: { label: "Coming soon", description: "Show the upcoming state and prevent new bookings." },
+  PARTIALLY_AVAILABLE: { label: "Partially available", description: "Keep supported parts available while explaining limitations." },
+  MAINTENANCE: { label: "Maintenance", description: "Temporarily block the app with a maintenance message." },
+  TEMPORARILY_UNAVAILABLE: { label: "Temporarily unavailable", description: "Block the affected app temporarily and show the configured message." },
+};
 const serviceStates = [
   "AVAILABLE",
   "PREPARING",
@@ -404,9 +411,10 @@ export function AppControlCenter() {
               }
             >
               {modes.map((mode) => (
-                <option key={mode}>{mode}</option>
+                <option key={mode} value={mode}>{modeDetails[mode].label}</option>
               ))}
             </select>
+            <p className="mt-2 text-xs font-bold text-[#667085]">{modeDetails[config.appStatus.mode]?.description}</p>
             <input
               className={cn(input, "mt-3")}
               placeholder="Customer title"
