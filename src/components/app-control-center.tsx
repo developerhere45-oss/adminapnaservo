@@ -1085,9 +1085,9 @@ function UpdateControls({
                   : "border-[#e6eaf2]",
               )}
             >
-              <p className="font-black">Soft update</p>
+              <p className="font-black">Normal update</p>
               <p className="mt-1 text-xs text-[#667085]">
-                User can update later.
+                Send update prompt — user can choose Later and continue using the app.
               </p>
             </button>
             <button
@@ -1100,9 +1100,9 @@ function UpdateControls({
                   : "border-[#e6eaf2]",
               )}
             >
-              <p className="font-black">Force update</p>
+              <p className="font-black">Mandatory update</p>
               <p className="mt-1 text-xs text-[#667085]">
-                Blocks versions below minimum.
+                Block older versions until they update. Later is not available.
               </p>
             </button>
           </div>
@@ -1131,6 +1131,9 @@ function UpdateControls({
             value={update.message}
             onChange={(event) => change({ message: event.target.value })}
           />
+          <p className="mt-3 rounded-lg bg-[#fff6e8] p-3 text-xs font-bold text-[#9a6700]">
+            Mandatory update works only when Minimum version is set higher than the installed app version. Save the draft, then Publish changes to send it.
+          </p>
         </div>
       </div>
       <Preview config={config} />
