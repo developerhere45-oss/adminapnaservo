@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
@@ -22,10 +22,8 @@ import { cn } from "@/lib/utils";
 type ControlConfig = {
   appStatus: {
     mode: string;
-    title: string;
-    message: string;
-    bookingEnabled: boolean;
   };
+  serviceAreas: { enabledAreas: string[] };
   launch: {
     enabled: boolean;
     launchAt: string;
@@ -95,8 +93,10 @@ type FeatureDefinition = {
   implementationState: "active" | "implementation_not_found";
   remoteConfigSupported?: boolean;
 };
+type ServiceArea = { id: string; label: string };
 const defaults: ControlConfig = {
-  appStatus: { mode: "LIVE", title: "", message: "", bookingEnabled: true },
+  appStatus: { mode: "LIVE" },
+  serviceAreas: { enabledAreas: [] },
   launch: {
     enabled: false,
     launchAt: "",
@@ -123,15 +123,13 @@ const defaults: ControlConfig = {
 };
 const modes = [
   "LIVE",
-  "COMING_SOON",
-  "PARTIALLY_AVAILABLE",
+  "PARTIALLY_UNAVAILABLE",
   "MAINTENANCE",
   "TEMPORARILY_UNAVAILABLE",
 ];
 const modeDetails: Record<string, { label: string; description: string }> = {
   LIVE: { label: "Live", description: "Everything is available and customers can continue normally." },
-  COMING_SOON: { label: "Coming soon", description: "Show the upcoming state and prevent new bookings." },
-  PARTIALLY_AVAILABLE: { label: "Partially available", description: "Keep supported parts available while explaining limitations." },
+  PARTIALLY_UNAVAILABLE: { label: "Partially unavailable", description: "Only customers inside a configured supported service area can book." },
   MAINTENANCE: { label: "Maintenance", description: "Temporarily block the app with a maintenance message." },
   TEMPORARILY_UNAVAILABLE: { label: "Temporarily unavailable", description: "Block the affected app temporarily and show the configured message." },
 };
@@ -140,7 +138,6 @@ const serviceStates = [
   "PREPARING",
   "HIGH_DEMAND",
   "TEMPORARILY_UNAVAILABLE",
-  "COMING_SOON",
   "DISABLED",
 ];
 
@@ -210,6 +207,9 @@ export function AppControlCenter() {
   const [editing, setEditing] = useState<Item | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  // Persist each draft patch in order. Without this, two quick select changes
+  // can finish out of order and make the UI (or a publish) use an old value.
+  const draftSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const controlPath = (path: string) => `${path}${path.includes("?") ? "&" : "?"}app=${selectedApp}`;
   useEffect(() => {
     if (!queryLoaded) {
@@ -234,6 +234,7 @@ export function AppControlCenter() {
         version: number;
         counts: { announcements: number; banners: number; auditLogs: number; activePartners?: number };
         services: ServiceSummary[];
+        serviceAreas: ServiceArea[];
         features: FeatureDefinition[];
       }>(controlPath("")),
   });
@@ -264,20 +265,21 @@ export function AppControlCenter() {
     enabled: tab === "audit",
   });
   const save = useMutation({
-    mutationFn: ({ section, value }: { section: string; value: unknown }) =>
-      api<{ draft: ControlConfig }>(controlPath("/draft"), {
+    mutationFn: ({ section, value, app }: { section: string; value: unknown; app: "customer" | "partner" }) =>
+      api<{ draft: ControlConfig }>(`/draft?app=${app}`, {
         method: "PATCH",
         body: JSON.stringify({ section, value }),
       }),
-    onSuccess: (result) => {
-      setDraft(result.draft);
+    onSuccess: () => {
       setMessage("Draft saved. Publish when ready.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
   const publish = useMutation({
-    mutationFn: () => api<{ ok: boolean }>(controlPath("/publish"), { method: "POST" }),
+    mutationFn: async () => {
+      await draftSaveQueue.current;
+      return api<{ ok: boolean }>(controlPath("/publish"), { method: "POST" });
+    },
     onSuccess: () => {
       setMessage(`Published to ${selectedApp} configuration.`);
       queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
@@ -317,7 +319,10 @@ export function AppControlCenter() {
   const setSection = (section: keyof ControlConfig, value: unknown) => {
     const next = { ...config, [section]: value };
     setDraft(next);
-    save.mutate({ section, value });
+    const app = selectedApp;
+    draftSaveQueue.current = draftSaveQueue.current
+      .catch(() => undefined)
+      .then(() => save.mutateAsync({ section, value, app }));
   };
   const displayedItems = useMemo(() => items.data?.items || [], [items.data]);
   const tabs: Array<typeof tab> = selectedApp === "partner"
@@ -418,42 +423,25 @@ export function AppControlCenter() {
               ))}
             </select>
             <p className="mt-2 text-xs font-bold text-[#667085]">{modeDetails[config.appStatus.mode]?.description}</p>
-            <input
-              className={cn(input, "mt-3")}
-              placeholder="Customer title"
-              value={config.appStatus.title}
-              onChange={(e) =>
-                setDraft({
-                  ...config,
-                  appStatus: { ...config.appStatus, title: e.target.value },
-                })
-              }
-              onBlur={() => setSection("appStatus", draft.appStatus)}
-            />
-            <textarea
-              className="mt-3 min-h-24 w-full rounded-lg border border-[#e6eaf2] p-3 text-sm"
-              placeholder="Customer message"
-              value={config.appStatus.message}
-              onChange={(e) =>
-                setDraft({
-                  ...config,
-                  appStatus: { ...config.appStatus, message: e.target.value },
-                })
-              }
-              onBlur={() => setSection("appStatus", draft.appStatus)}
-            />
-            <div className="mt-4">
-              <Toggle
-                label="Allow bookings"
-                value={config.appStatus.bookingEnabled}
-                onChange={(bookingEnabled) =>
-                  setSection("appStatus", {
-                    ...config.appStatus,
-                    bookingEnabled,
-                  })
-                }
-              />
-            </div>
+            {selectedApp === "customer" && config.appStatus.mode === "PARTIALLY_UNAVAILABLE" && (
+              <div className="mt-5 rounded-xl border border-[#f3d4dd] bg-[#fffafb] p-4">
+                <p className="text-sm font-black">Supported service areas</p>
+                <p className="mt-1 text-xs text-[#667085]">Select from your active partner coverage. Customers outside these areas cannot create a booking after publishing.</p>
+                <div className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+                  {(overview.data?.serviceAreas || []).map((area) => {
+                    const checked = config.serviceAreas.enabledAreas.includes(area.id);
+                    return <label key={area.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold">
+                      <input type="checkbox" checked={checked} onChange={(event) => {
+                        const enabledAreas = event.target.checked ? [...config.serviceAreas.enabledAreas, area.id] : config.serviceAreas.enabledAreas.filter((value) => value !== area.id);
+                        setSection("serviceAreas", { enabledAreas });
+                      }} />
+                      {area.label}
+                    </label>;
+                  })}
+                  {!overview.data?.serviceAreas?.length && <p className="text-xs text-[#667085]">No active partner coverage is available yet. Add active partner service areas before publishing this status.</p>}
+                </div>
+              </div>
+            )}
           </div>
           <Preview config={config} />
         </section>
@@ -623,23 +611,26 @@ export function AppControlCenter() {
 
 function Preview({ config }: { config: ControlConfig }) {
   const mode = config.appStatus.mode;
+  const details = mode === "MAINTENANCE"
+    ? { title: "ApnaServo is Under Maintenance", message: "We are currently performing some maintenance to improve your experience.", booking: "Blocked" }
+    : mode === "TEMPORARILY_UNAVAILABLE"
+      ? { title: "App is facing high demand", message: "We are currently receiving a high number of service requests.", booking: "Blocked" }
+      : mode === "PARTIALLY_UNAVAILABLE"
+        ? { title: "We're Not Available in Your Area", message: "Booking is available only in configured supported service areas.", booking: "Area based" }
+        : { title: "ApnaServo is live", message: "Your trusted home services app.", booking: "Available" };
   return (
     <aside className="rounded-2xl border border-[#f3d4dd] bg-[#fffafb] p-5">
       <p className="text-xs font-black text-[#f32368]">LIVE CUSTOMER PREVIEW</p>
       <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
         <Rocket className="text-[#f32368]" size={30} />
         <h3 className="mt-4 text-xl font-black">
-          {mode === "LIVE"
-            ? "ApnaServo is live"
-            : config.appStatus.title || mode.replace(/_/g, " ")}
+          {details.title}
         </h3>
         <p className="mt-2 text-sm text-[#667085]">
-          {config.appStatus.message ||
-            config.launch.description ||
-            "Your trusted home services app."}
+          {details.message}
         </p>
         <p className="mt-5 rounded-lg bg-[#fff0f4] px-3 py-2 text-xs font-black text-[#bd1749]">
-          Booking: {config.appStatus.bookingEnabled ? "Available" : "Disabled"}
+          Booking: {details.booking}
         </p>
       </div>
     </aside>
@@ -752,7 +743,6 @@ function ServiceControls({
                   const bookable = ![
                     "PREPARING",
                     "TEMPORARILY_UNAVAILABLE",
-                    "COMING_SOON",
                     "DISABLED",
                   ].includes(state);
                   return (
@@ -842,7 +832,6 @@ function ServiceControls({
                     ![
                       "PREPARING",
                       "TEMPORARILY_UNAVAILABLE",
-                      "COMING_SOON",
                       "DISABLED",
                     ].includes(item.status)
                       ? "Booking enabled"
@@ -852,7 +841,6 @@ function ServiceControls({
                     ![
                       "PREPARING",
                       "TEMPORARILY_UNAVAILABLE",
-                      "COMING_SOON",
                       "DISABLED",
                     ].includes(item.status)
                   }
