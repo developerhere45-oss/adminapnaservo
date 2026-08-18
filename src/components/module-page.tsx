@@ -1231,6 +1231,7 @@ export function StandalonePartnerProfile({ partnerId }: { partnerId: string }) {
       await queryClient.invalidateQueries({ queryKey: ["admin-partner-profile-shell", partnerId] });
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partners"] });
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", "partner-approvals"] });
+      await queryClient.invalidateQueries({ queryKey: ["partner-approval-count"] });
     },
     onError: (error) => {
       setActionMessage(error instanceof Error ? error.message : "Action failed");
@@ -1347,6 +1348,9 @@ export function ModulePage({ resource }: { resource: string }) {
       setActionMessage(adminActionMessage(variables.action, result));
       setSelected(null);
       await queryClient.invalidateQueries({ queryKey: ["admin-resource", resource] });
+      if (["approve-technician", "reject-technician"].includes(variables.action)) {
+        await queryClient.invalidateQueries({ queryKey: ["partner-approval-count"] });
+      }
     },
     onError: (error) => {
       setActionMessage(error instanceof Error ? error.message : "Action failed");

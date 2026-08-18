@@ -197,6 +197,7 @@ export function RealtimeBridge() {
             pushEvent(eventName, payload as Record<string, unknown>);
             queryClient.invalidateQueries({ queryKey: ["overview"] });
             queryClient.invalidateQueries({ queryKey: ["admin-resource"] });
+            queryClient.invalidateQueries({ queryKey: ["partner-approval-count"] });
             queryClient.invalidateQueries({ queryKey: ["admin-partner-profile"] });
             queryClient.invalidateQueries({ queryKey: ["admin-partner-profile-shell"] });
             queryClient.invalidateQueries({ queryKey: ["users-control-center"] });

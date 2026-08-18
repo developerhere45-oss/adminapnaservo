@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
   CalendarDays,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import { Providers } from "@/app/providers";
 import { LiveStatusPill, RealtimeBridge, useLiveAdmin } from "@/components/realtime-bridge";
+import { liveQueryDefaults, visibleRefetchInterval } from "@/lib/live-query";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -38,7 +40,7 @@ const navItems = [
   { href: "/notifications", label: "Notifications", icon: Megaphone },
   { href: "/devices", label: "Devices", icon: Smartphone },
   { href: "/partners", label: "Partners", icon: UserCheck },
-  { href: "/partner-approvals", label: "Partner Approvals", icon: ShieldCheck, badge: "8" },
+  { href: "/partner-approvals", label: "Partner Approvals", icon: ShieldCheck },
   { href: "/payments", label: "Payments & Finance", icon: WalletCards },
   { href: "/bookings", label: "Bookings", icon: CalendarCheck },
   { href: "/reports", label: "Reports", icon: FileText },
@@ -60,6 +62,23 @@ function Logo({ onClick }: { onClick?: () => void }) {
 function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const base = pathname.startsWith("/admin") ? "/admin" : "";
+  const approvalsQuery = useQuery({
+    ...liveQueryDefaults,
+    queryKey: ["partner-approval-count"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/partner-approvals", { cache: "no-store" });
+      if (!response.ok) throw new Error("Partner approvals unavailable");
+      const payload = await response.json() as { metrics?: { pendingApproval?: unknown }; rows?: Array<Record<string, unknown>> };
+      const backendCount = Number(payload.metrics?.pendingApproval);
+      if (Number.isFinite(backendCount) && backendCount >= 0) return backendCount;
+      return (payload.rows || []).filter((partner) => {
+        const kyc = String(partner.kycStatus || partner.kyc || "").toLowerCase();
+        return ["missing", "submitted", "pending_review"].includes(kyc);
+      }).length;
+    },
+    refetchInterval: visibleRefetchInterval(30_000),
+  });
+  const pendingApprovals = approvalsQuery.data || 0;
 
   return (
     <aside
@@ -84,6 +103,7 @@ function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?
           const href = `${base}${item.href}`;
           const active = pathname === href || (href !== `${base}/dashboard` && pathname.startsWith(`${href}/`));
           const Icon = item.icon;
+          const badge = item.href === "/partner-approvals" && pendingApprovals > 0 ? String(pendingApprovals) : undefined;
           return (
             <Link
               key={item.href}
@@ -97,7 +117,7 @@ function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?
             >
               <Icon size={18} />
               <span className="min-w-0 flex-1">{item.label}</span>
-              {item.badge && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#0b6df6] px-1.5 text-[11px] font-black text-white">{item.badge}</span>}
+              {badge && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#0b6df6] px-1.5 text-[11px] font-black text-white">{badge}</span>}
             </Link>
           );
         })}
