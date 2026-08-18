@@ -547,7 +547,6 @@ export function AppControlCenter() {
       {tab === "updates" && (
         <UpdateControls
           config={config}
-          input={input}
           onChange={(update) => setSection("update", update)}
         />
       )}
@@ -1037,111 +1036,38 @@ function FeatureControls({
 }
 function UpdateControls({
   config,
-  input,
   onChange,
 }: {
   config: ControlConfig;
-  input: string;
   onChange: (value: ControlConfig["update"]) => void;
 }) {
   const update = config.update;
-  const change = (patch: Partial<ControlConfig["update"]>) =>
-    onChange({ ...update, ...patch });
+  const selectedType = update.type === "force" ? "force" : "soft";
+  const choose = (type: "soft" | "force") =>
+    onChange({ ...update, enabled: true, type });
   return (
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
-      <div className="space-y-4">
-        <header>
-          <h2 className="text-2xl font-black">Update Management</h2>
-          <p className="mt-1 text-sm text-[#667085]">
-            Manage app-update prompts without forcing an unsafe or incomplete
-            version.
-          </p>
-        </header>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            ["Current version", "Installed apps"],
-            ["Latest version", update.latestVersion || "Not set"],
-            ["Minimum version", update.minimumVersion || "Not set"],
-            ["Update status", update.enabled ? "Active" : "Inactive"],
-          ].map(([label, value]) => (
-            <div key={label} className="admin-card p-4">
-              <p className="text-xs font-bold text-[#667085]">{label}</p>
-              <p className="mt-2 text-xl font-black">{value}</p>
+    <section className="space-y-6">
+      <header>
+        <h2 className="text-2xl font-black">Update Management</h2>
+        <p className="mt-1 text-sm text-[#667085]">Choose how customers should receive the latest ApnaServo version.</p>
+      </header>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {[
+          { type: "soft" as const, title: "Normal Update", icon: "↻", description: "Notify customers about the new version. Customers can choose to update immediately or dismiss the prompt and continue using their current version of the app." },
+          { type: "force" as const, title: "Mandatory Update", icon: "♜", description: "Require customers to update before continuing to use the app. Use this for critical security patches or major breaking changes to the backend." },
+        ].map((option) => {
+          const selected = selectedType === option.type;
+          return <button key={option.type} type="button" onClick={() => choose(option.type)} aria-pressed={selected} className={cn("min-h-[310px] rounded-xl border p-6 text-left transition", selected ? "border-[#f32368] bg-[#fff9fa] shadow-[0_10px_26px_rgba(243,35,104,0.08)]" : "border-[#e2e8f0] bg-white hover:border-[#f3a1b9] hover:bg-[#fffafb]") }>
+            <div className="flex items-start justify-between gap-3">
+              <span className={cn("grid h-16 w-16 place-items-center rounded-xl text-3xl font-black", selected ? "bg-[#ffe5ed] text-[#f32368]" : "bg-[#eaf2ff] text-[#53739d]")}>{option.icon}</span>
+              {selected ? <span className="rounded-md bg-[#ffe5ed] px-3 py-2 text-xs font-black text-[#f32368]">◉ Currently selected</span> : <span className="flex items-center gap-2 pt-2 text-sm font-bold text-[#667085]">Select <i className="h-5 w-5 rounded-full border-2 border-[#c9d2df]" /></span>}
             </div>
-          ))}
-        </div>
-        <div className="admin-card p-5">
-          <h3 className="text-lg font-black">Update configuration</h3>
-          <div className="mt-4">
-            <Toggle
-              label="Update available"
-              value={update.enabled}
-              onChange={(enabled) => change({ enabled })}
-            />
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => change({ type: "soft" })}
-              className={cn(
-                "rounded-xl border p-4 text-left",
-                update.type === "soft"
-                  ? "border-[#f32368] bg-[#fff5f7]"
-                  : "border-[#e6eaf2]",
-              )}
-            >
-              <p className="font-black">Normal update</p>
-              <p className="mt-1 text-xs text-[#667085]">
-                Send update prompt — user can choose Later and continue using the app.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={() => change({ type: "force" })}
-              className={cn(
-                "rounded-xl border p-4 text-left",
-                update.type === "force"
-                  ? "border-[#f32368] bg-[#fff5f7]"
-                  : "border-[#e6eaf2]",
-              )}
-            >
-              <p className="font-black">Mandatory update</p>
-              <p className="mt-1 text-xs text-[#667085]">
-                Block older versions until they update. Later is not available.
-              </p>
-            </button>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {(
-              [
-                "latestVersion",
-                "minimumVersion",
-                "title",
-                "buttonText",
-                "storeUrl",
-              ] as const
-            ).map((key) => (
-              <input
-                key={key}
-                className={input}
-                placeholder={key}
-                value={update[key] || ""}
-                onChange={(event) => change({ [key]: event.target.value })}
-              />
-            ))}
-          </div>
-          <textarea
-            className="mt-3 min-h-24 w-full rounded-lg border border-[#e6eaf2] p-3 text-sm"
-            placeholder="Update message"
-            value={update.message}
-            onChange={(event) => change({ message: event.target.value })}
-          />
-          <p className="mt-3 rounded-lg bg-[#fff6e8] p-3 text-xs font-bold text-[#9a6700]">
-            Mandatory update works only when Minimum version is set higher than the installed app version. Save the draft, then Publish changes to send it.
-          </p>
-        </div>
+            <h3 className="mt-6 text-xl font-black text-[#17233c]">{option.title}</h3>
+            <p className="mt-5 max-w-[470px] text-sm leading-7 text-[#536078]">{option.description}</p>
+          </button>;
+        })}
       </div>
-      <Preview config={config} />
+      <p className="text-xs font-semibold text-[#667085]">Your choice is saved as a draft. Publish changes to send the selected update experience to customer devices.</p>
     </section>
   );
 }
