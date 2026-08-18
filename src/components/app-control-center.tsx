@@ -58,7 +58,7 @@ type ControlConfig = {
   >;
   services: Record<string, { status: string; message: string }>;
   media: {
-    hero: { imageUrl: string };
+    hero: { imageUrl: string; slides: Record<string, { imageUrl: string }> };
     services: Record<string, { imageUrl: string }>;
   };
 };
@@ -123,7 +123,7 @@ const defaults: ControlConfig = {
   ui: { homeTitle: "", homeSubtitle: "", primaryColor: "#f32368", hiddenSections: [] },
   features: {},
   services: {},
-  media: { hero: { imageUrl: "" }, services: {} },
+  media: { hero: { imageUrl: "", slides: {} }, services: {} },
 };
 const modes = [
   "LIVE",
@@ -1099,6 +1099,19 @@ const MEDIA_FALLBACKS: Record<string, string> = {
   ro: "/customer-media/service_home_ro.jpg",
 };
 const HERO_FALLBACK = "/customer-media/hero_ro_background.jpg";
+const HERO_SLIDE_ORDER = ["ro", "ac", "electrician", "plumbing", "cleaning", "laundry", "roadside", "appliances", "painting", "interior"];
+const HERO_SLIDE_FALLBACKS: Record<string, string> = {
+  ro: "/customer-media/hero_ro_background.jpg",
+  ac: "/customer-media/hero_banner_ac.jpg",
+  electrician: "/customer-media/hero_banner_electrician.jpg",
+  plumbing: "/customer-media/hero_banner_plumbing.jpg",
+  cleaning: "/customer-media/service_home_cleaning.jpg",
+  laundry: "/customer-media/hero_banner_laundry.jpg",
+  roadside: "/customer-media/hero_banner_roadside.jpg",
+  appliances: "/customer-media/hero_banner_appliances.jpg",
+  painting: "/customer-media/hero_banner_painting.jpg",
+  interior: "/customer-media/service_home_interior.jpg",
+};
 
 function MediaManager({
   config,
@@ -1126,7 +1139,11 @@ function MediaManager({
       const response = await fetch("/api/admin/control-center/media/upload", { method: "POST", body: form });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.imageUrl) throw new Error(payload.message || "Image upload failed");
-      if (target === "hero") onChange({ ...media, hero: { imageUrl: payload.imageUrl } });
+      if (target === "hero") onChange({ ...media, hero: { ...media.hero, imageUrl: payload.imageUrl } });
+      else if (target.startsWith("hero:")) {
+        const serviceId = target.slice(5);
+        onChange({ ...media, hero: { ...media.hero, imageUrl: "", slides: { ...media.hero.slides, [serviceId]: { imageUrl: payload.imageUrl } } } });
+      }
       else onChange({ ...media, services: { ...media.services, [target]: { imageUrl: payload.imageUrl } } });
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Image upload failed");
@@ -1135,7 +1152,11 @@ function MediaManager({
     }
   };
   const reset = (target: "hero" | string) => {
-    if (target === "hero") onChange({ ...media, hero: { imageUrl: "" } });
+    if (target === "hero") onChange({ ...media, hero: { ...media.hero, imageUrl: "" } });
+    else if (target.startsWith("hero:")) {
+      const serviceId = target.slice(5);
+      onChange({ ...media, hero: { ...media.hero, imageUrl: "", slides: { ...media.hero.slides, [serviceId]: { imageUrl: "" } } } });
+    }
     else onChange({ ...media, services: { ...media.services, [target]: { imageUrl: "" } } });
   };
   const ImageButton = ({ target, label }: { target: "hero" | string; label: string }) => (
@@ -1157,11 +1178,17 @@ function MediaManager({
       {error && <p className="rounded-lg border border-[#f7bfd0] bg-[#fff5f7] px-4 py-3 text-sm font-bold text-[#bd1749]">{error}</p>}
       <article className="admin-card overflow-hidden p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div><h3 className="text-lg font-black">Hero Image</h3><p className="mt-1 text-sm text-[#667085]">The main promotional image shown behind the customer home hero.</p></div>
-          <div className="flex gap-2"><span className="rounded-full bg-[#eafaf2] px-3 py-1.5 text-xs font-black text-[#16845b]">● {media.hero.imageUrl ? "Draft override" : "Bundled fallback"}</span><ImageButton target="hero" label="Change Image" /></div>
+          <div><h3 className="text-lg font-black">Hero Carousel</h3><p className="mt-1 text-sm text-[#667085]">These are the actual home-screen slides. They rotate in the same customer-app service sequence.</p></div>
+          <span className="rounded-full bg-[#eafaf2] px-3 py-1.5 text-xs font-black text-[#16845b]">● {HERO_SLIDE_ORDER.length} active slides</span>
         </div>
-        <div className="overflow-hidden rounded-lg border border-[#edf0f6] bg-[#fff8f7]"><img src={media.hero.imageUrl || HERO_FALLBACK} alt="Customer home hero" className="h-48 w-full object-cover sm:h-64" onError={(event) => { event.currentTarget.src = HERO_FALLBACK; }} /></div>
-        {media.hero.imageUrl && <button type="button" onClick={() => reset("hero")} className="mt-3 text-xs font-black text-[#667085] underline">Restore bundled hero</button>}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {HERO_SLIDE_ORDER.map((id, index) => {
+            const service = knownServices.find((item) => item.serviceCategory === id);
+            const fallback = HERO_SLIDE_FALLBACKS[id] || HERO_FALLBACK;
+            const remote = media.hero.slides?.[id]?.imageUrl || "";
+            return <div key={id} className="overflow-hidden rounded-xl border border-[#e7eaf0] bg-white"><img src={remote || fallback} alt={`${service?.name || id} hero slide`} className="h-28 w-full object-cover" onError={(event) => { event.currentTarget.src = fallback; }} /><div className="p-3"><p className="text-[10px] font-black uppercase tracking-wide text-[#8a6370]">Slide {index + 1}</p><p className="truncate text-sm font-black">{service?.name || id}</p><div className="mt-3 flex gap-2"><ImageButton target={`hero:${id}`} label="Change Slide" />{remote && <button type="button" onClick={() => reset(`hero:${id}`)} className="text-xs font-black text-[#667085] underline">Discard</button>}</div></div></div>;
+          })}
+        </div>
       </article>
       <article className="admin-card p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-black">Service Images</h3><p className="mt-1 text-sm text-[#667085]">The actual image used by each customer service card and its matching home carousel slide.</p></div></div>
