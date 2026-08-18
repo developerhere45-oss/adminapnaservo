@@ -1055,8 +1055,32 @@ function UpdateControls({
 }) {
   const update = config.update;
   const selectedType = update.type === "force" ? "force" : "soft";
+  const [targetVersion, setTargetVersion] = useState(update.latestVersion);
+  const [targetDirty, setTargetDirty] = useState(false);
+  useEffect(() => {
+    if (!targetDirty) setTargetVersion(update.latestVersion);
+  }, [targetDirty, update.latestVersion]);
+  const normaliseVersion = (value: string) => value.trim().replace(/^v/i, "");
+  const isVersion = (value: string) => /^\d+(?:\.\d+){1,3}$/.test(normaliseVersion(value));
+  const saveTargetVersion = () => {
+    const latestVersion = normaliseVersion(targetVersion);
+    const valid = isVersion(latestVersion);
+    setTargetDirty(false);
+    onChange({
+      ...update,
+      enabled: valid,
+      latestVersion,
+      minimumVersion: selectedType === "force" && valid ? latestVersion : "",
+    });
+  };
   const choose = (type: "soft" | "force") =>
-    onChange({ ...update, enabled: true, type });
+    onChange({
+      ...update,
+      enabled: isVersion(targetVersion),
+      type,
+      latestVersion: normaliseVersion(targetVersion),
+      minimumVersion: type === "force" && isVersion(targetVersion) ? normaliseVersion(targetVersion) : "",
+    });
   return (
     <section className="space-y-6">
       <header>
@@ -1079,7 +1103,29 @@ function UpdateControls({
           </button>;
         })}
       </div>
-      <p className="text-xs font-semibold text-[#667085]">Your choice is saved as a draft. Publish changes to send the selected update experience to customer devices.</p>
+      <div className="rounded-xl border border-[#e6eaf2] bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-black text-[#17233c]">Target Play Store version</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[#667085]">Enter the exact Android <b>versionName</b> you uploaded to Play Store. Example: installed app <b>1.0.15</b> → new Play release <b>1.0.16</b>. The same rule continues for every later release.</p>
+          </div>
+          <span className={cn("rounded-full px-3 py-1.5 text-xs font-black", isVersion(targetVersion) ? "bg-[#eafaf2] text-[#067647]" : "bg-[#fff0f4] text-[#bd1749]")}>{isVersion(targetVersion) ? "Ready to publish" : "Version required"}</span>
+        </div>
+        <label className="mt-4 block max-w-md text-xs font-bold text-[#667085]">New version available on Play Store
+          <input
+            className="mt-1 h-11 w-full rounded-lg border border-[#e6eaf2] bg-white px-3 text-sm font-bold text-[#17233c] outline-none focus:border-[#f32368]"
+            inputMode="decimal"
+            placeholder="1.0.16"
+            value={targetVersion}
+            onChange={(event) => { setTargetDirty(true); setTargetVersion(event.target.value); }}
+            onBlur={saveTargetVersion}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.currentTarget.blur(); } }}
+          />
+        </label>
+        {selectedType === "force" && isVersion(targetVersion) && <p className="mt-3 rounded-lg bg-[#fff7f8] px-3 py-2 text-xs font-bold text-[#9f1239]">Mandatory update will block every app version below <b>{normaliseVersion(targetVersion)}</b>.</p>}
+        {!isVersion(targetVersion) && <p className="mt-3 text-xs font-semibold text-[#bd1749]">Use numeric semantic format, for example <b>1.0.16</b>. Update delivery remains off until a valid target is saved.</p>}
+      </div>
+      <p className="text-xs font-semibold text-[#667085]">Your choice is saved as a draft. Publish changes after the target version is live in Play Store; customer devices fetch the published setting on launch and after a live configuration refresh.</p>
     </section>
   );
 }
