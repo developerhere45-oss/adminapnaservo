@@ -139,6 +139,31 @@ const serviceStates = [
   "TEMPORARILY_UNAVAILABLE",
   "DISABLED",
 ];
+// Matches the services implemented in the signed customer application. This
+// keeps operations usable while a backend catalog migration is still empty or
+// a server instance is in the middle of a rollout.
+const CUSTOMER_SERVICE_CATALOG: ServiceSummary[] = [
+  ["ac", "AC Repair & Service", "AC inspection, cleaning, gas refilling, performance check, and repair replacement."],
+  ["electrician", "Electrician", "Switchboard, wiring, fan, MCB, socket, inverter, and urgent electrical repair."],
+  ["plumbing", "Plumber", "Tap, sink, flush tank, blocked drain, water motor, leakage, and pipe repair."],
+  ["carpenter", "Carpenter", "Door, lock, curtain rod, furniture assembly, wall shelf, and cabinet fixes."],
+  ["painting", "Painting", "Wall painting, touch-ups, damp patch repair, rental move-out paint, and finish work."],
+  ["interior", "Interior Design", "Consultation for room planning, furniture placement, lighting, and home styling."],
+  ["roadside", "Roadside Assistance", "Emergency roadside help, jump-start support, towing coordination, and tyre help."],
+  ["cleaning", "Cleaning Services", "Home and office cleaning, bathroom cleaning, sofa cleaning, and deep cleaning."],
+  ["laundry", "Laundry", "Clothes washing, ironing, dry cleaning pickup, stain care, and doorstep laundry service."],
+  ["pest", "Pest Control", "Safe pest treatment for home, kitchen, bathroom, and office spaces."],
+  ["appliances", "Appliances", "Washing machine, refrigerator, microwave, RO, chimney, and geyser inspection."],
+  ["ro", "RO Service", "RO water purifier inspection, filter change, leakage repair, servicing, and installation."],
+].map(([serviceCategory, name, description]) => ({
+  _id: `catalog:${serviceCategory}`,
+  serviceCategory,
+  name,
+  description,
+  isActive: true,
+  availability: "AVAILABLE",
+  availabilityMessage: "",
+}));
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/admin/control-center${path}`, {
@@ -474,7 +499,7 @@ export function AppControlCenter() {
         <ServiceControls
           config={config}
           input={input}
-          services={overview.data?.services || []}
+          services={overview.data?.services?.length ? overview.data.services : CUSTOMER_SERVICE_CATALOG}
           onChange={(services) => setSection("services", services)}
         />
       )}
