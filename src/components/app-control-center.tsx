@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
+  CircleAlert,
+  CircleCheckBig,
   Eye,
   Megaphone,
   MonitorCog,
@@ -23,7 +25,6 @@ type ControlConfig = {
   appStatus: {
     mode: string;
   };
-  serviceAreas: { enabledAreas: string[] };
   launch: {
     enabled: boolean;
     launchAt: string;
@@ -93,10 +94,8 @@ type FeatureDefinition = {
   implementationState: "active" | "implementation_not_found";
   remoteConfigSupported?: boolean;
 };
-type ServiceArea = { id: string; label: string };
 const defaults: ControlConfig = {
   appStatus: { mode: "LIVE" },
-  serviceAreas: { enabledAreas: [] },
   launch: {
     enabled: false,
     launchAt: "",
@@ -123,15 +122,15 @@ const defaults: ControlConfig = {
 };
 const modes = [
   "LIVE",
-  "PARTIALLY_UNAVAILABLE",
+  "PARTIALLY_AVAILABLE",
+  "HIGH_DEMAND",
   "MAINTENANCE",
-  "TEMPORARILY_UNAVAILABLE",
 ];
-const modeDetails: Record<string, { label: string; description: string }> = {
-  LIVE: { label: "Live", description: "Everything is available and customers can continue normally." },
-  PARTIALLY_UNAVAILABLE: { label: "Partially unavailable", description: "Only customers inside a configured supported service area can book." },
-  MAINTENANCE: { label: "Maintenance", description: "Temporarily block the app with a maintenance message." },
-  TEMPORARILY_UNAVAILABLE: { label: "Temporarily unavailable", description: "Block the affected app temporarily and show the configured message." },
+const modeDetails: Record<string, { label: string; description: string; Icon: typeof ShieldCheck; tone: string; selected: string }> = {
+  LIVE: { label: "LIVE", description: "Everything is available and customers can continue normally.", Icon: CircleCheckBig, tone: "text-[#12b886]", selected: "border-[#12b886] bg-[#f2fffa]" },
+  PARTIALLY_AVAILABLE: { label: "PARTIALLY AVAILABLE", description: "Some services or regions may be temporarily unavailable.", Icon: CircleAlert, tone: "text-[#f0a21a]", selected: "border-[#f0a21a] bg-[#fffaf0]" },
+  HIGH_DEMAND: { label: "HIGH DEMAND", description: "App operates normally but shows a high-demand warning banner.", Icon: Megaphone, tone: "text-[#ef7f3b]", selected: "border-[#ef7f3b] bg-[#fff7f2]" },
+  MAINTENANCE: { label: "MAINTENANCE", description: "App is locked. Users see a maintenance screen and cannot interact.", Icon: Wrench, tone: "text-[#e25368]", selected: "border-[#e25368] bg-[#fff7f8]" },
 };
 const serviceStates = [
   "AVAILABLE",
@@ -234,7 +233,6 @@ export function AppControlCenter() {
         version: number;
         counts: { announcements: number; banners: number; auditLogs: number; activePartners?: number };
         services: ServiceSummary[];
-        serviceAreas: ServiceArea[];
         features: FeatureDefinition[];
       }>(controlPath("")),
   });
@@ -402,46 +400,35 @@ export function AppControlCenter() {
         ))}
       </nav>
       {tab === "status" && (
-        <section className="admin-card grid gap-6 p-5 lg:grid-cols-2">
-          <div>
-            <h2 className="text-lg font-black">App Status</h2>
-            <p className="mt-1 text-sm text-[#667085]">
-              Booking APIs enforce this after publishing.
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-2xl border border-[#f0d6dc] bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black">App Status Override</h2>
+            <p className="mt-1 max-w-xl text-sm leading-5 text-[#667085]">
+              Select the operational status to force-broadcast to all customer devices. This overrides normal API availability.
             </p>
-            <select
-              className={cn(input, "mt-5")}
-              value={config.appStatus.mode}
-              onChange={(e) =>
-                setSection("appStatus", {
-                  ...config.appStatus,
-                  mode: e.target.value,
-                })
-              }
-            >
-              {modes.map((mode) => (
-                <option key={mode} value={mode}>{modeDetails[mode].label}</option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs font-bold text-[#667085]">{modeDetails[config.appStatus.mode]?.description}</p>
-            {selectedApp === "customer" && config.appStatus.mode === "PARTIALLY_UNAVAILABLE" && (
-              <div className="mt-5 rounded-xl border border-[#f3d4dd] bg-[#fffafb] p-4">
-                <p className="text-sm font-black">Supported service areas</p>
-                <p className="mt-1 text-xs text-[#667085]">Select from your active partner coverage. Customers outside these areas cannot create a booking after publishing.</p>
-                <div className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
-                  {(overview.data?.serviceAreas || []).map((area) => {
-                    const checked = config.serviceAreas.enabledAreas.includes(area.id);
-                    return <label key={area.id} className="flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold">
-                      <input type="checkbox" checked={checked} onChange={(event) => {
-                        const enabledAreas = event.target.checked ? [...config.serviceAreas.enabledAreas, area.id] : config.serviceAreas.enabledAreas.filter((value) => value !== area.id);
-                        setSection("serviceAreas", { enabledAreas });
-                      }} />
-                      {area.label}
-                    </label>;
-                  })}
-                  {!overview.data?.serviceAreas?.length && <p className="text-xs text-[#667085]">No active partner coverage is available yet. Add active partner service areas before publishing this status.</p>}
-                </div>
-              </div>
-            )}
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {modes.map((mode) => {
+                const detail = modeDetails[mode];
+                const Icon = detail.Icon;
+                const selected = config.appStatus.mode === mode;
+                return <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setSection("appStatus", { ...config.appStatus, mode })}
+                  className={cn(
+                    "min-h-28 rounded-xl border-2 p-4 text-left transition hover:border-[#f3a1b9]",
+                    selected ? detail.selected : "border-[#efd7dd] bg-white",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon size={19} className={detail.tone} />
+                    <span className="text-xs font-black tracking-wide text-[#30343b]">{detail.label}</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-[#667085]">{detail.description}</p>
+                </button>;
+              })}
+            </div>
           </div>
           <Preview config={config} />
         </section>
@@ -613,10 +600,10 @@ function Preview({ config }: { config: ControlConfig }) {
   const mode = config.appStatus.mode;
   const details = mode === "MAINTENANCE"
     ? { title: "ApnaServo is Under Maintenance", message: "We are currently performing some maintenance to improve your experience.", booking: "Blocked" }
-    : mode === "TEMPORARILY_UNAVAILABLE"
-      ? { title: "App is facing high demand", message: "We are currently receiving a high number of service requests.", booking: "Blocked" }
-      : mode === "PARTIALLY_UNAVAILABLE"
-        ? { title: "We're Not Available in Your Area", message: "Booking is available only in configured supported service areas.", booking: "Area based" }
+    : mode === "HIGH_DEMAND"
+      ? { title: "App is facing high demand", message: "We are currently receiving a high number of service requests.", booking: "Temporarily paused" }
+      : mode === "PARTIALLY_AVAILABLE"
+        ? { title: "ApnaServo is partially available", message: "Some services may be temporarily unavailable.", booking: "Available" }
         : { title: "ApnaServo is live", message: "Your trusted home services app.", booking: "Available" };
   return (
     <aside className="rounded-2xl border border-[#f3d4dd] bg-[#fffafb] p-5">
