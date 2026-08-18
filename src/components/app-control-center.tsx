@@ -231,6 +231,9 @@ export function AppControlCenter() {
   const [editing, setEditing] = useState<Item | null>(null);
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const activeDraftApp = useRef<"customer" | "partner">("customer");
+  const draftRevision = useRef(0);
+  const draftSnapshot = useRef<ControlConfig>(defaults);
   // Persist each draft patch in order. Without this, two quick select changes
   // can finish out of order and make the UI (or a publish) use an old value.
   const draftSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -262,9 +265,13 @@ export function AppControlCenter() {
       }>(controlPath("")),
   });
   useEffect(() => {
-    if (overview.data?.draft) setDraft(overview.data.draft);
+    // Network data is only the initial source. Once the admin has made a
+    // local selection, a late/stale overview response must never roll it back.
+    if (overview.data?.draft && draftRevision.current === 0) {
+      draftSnapshot.current = overview.data.draft;
+      setDraft(overview.data.draft);
+    }
   }, [overview.data?.draft]);
-  const current = overview.data?.draft || defaults;
   const items = useQuery({
     queryKey: ["app-control-items", selectedApp, tab, search],
     queryFn: () =>
@@ -288,13 +295,20 @@ export function AppControlCenter() {
     enabled: tab === "audit",
   });
   const save = useMutation({
-    mutationFn: ({ section, value, app }: { section: string; value: unknown; app: "customer" | "partner" }) =>
+    mutationFn: ({ section, value, app }: { section: string; value: unknown; app: "customer" | "partner"; revision: number }) =>
       api<{ draft: ControlConfig }>(`/draft?app=${app}`, {
         method: "PATCH",
         body: JSON.stringify({ section, value }),
       }),
-    onSuccess: () => {
+    onSuccess: (result, request) => {
       setMessage("Draft saved. Publish when ready.");
+      if (request.app === activeDraftApp.current && request.revision === draftRevision.current) {
+        draftSnapshot.current = result.draft;
+        setDraft(result.draft);
+        queryClient.setQueryData(["app-control-overview", request.app], (previous: typeof overview.data) =>
+          previous ? { ...previous, draft: result.draft } : previous,
+        );
+      }
     },
     onError: (error: Error) => setMessage(error.message),
   });
@@ -327,17 +341,19 @@ export function AppControlCenter() {
     },
     onError: (error: Error) => setMessage(error.message),
   });
-  const config = overview.data ? draft : current;
+  const config = draft;
   const setSection = (section: keyof ControlConfig, value: unknown) => {
     // Update the visual draft first. The serialized save queue then persists
     // the exact state in order, so changing several services cannot make an
     // earlier network response overwrite a later selection.
-    const next = { ...draft, [section]: value };
+    const revision = ++draftRevision.current;
+    const next = { ...draftSnapshot.current, [section]: value };
+    draftSnapshot.current = next;
     setDraft(next);
     const app = selectedApp;
     draftSaveQueue.current = draftSaveQueue.current
       .catch(() => undefined)
-      .then(() => save.mutateAsync({ section, value, app }));
+      .then(() => save.mutateAsync({ section, value, app, revision }));
   };
   const displayedItems = useMemo(() => items.data?.items || [], [items.data]);
   const tabs: Array<typeof tab> = selectedApp === "partner"
@@ -357,7 +373,7 @@ export function AppControlCenter() {
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex rounded-lg border border-[#e6eaf2] bg-white p-1 text-sm font-bold">
-            {(["customer", "partner"] as const).map((app) => <button key={app} onClick={() => setSelectedApp(app)} className={cn("rounded-md px-3 py-2 capitalize", selectedApp === app && "bg-[#fff0f4] text-[#bd1749]")}>{app} app</button>)}
+            {(["customer", "partner"] as const).map((app) => <button key={app} onClick={() => { activeDraftApp.current = app; draftRevision.current = 0; draftSnapshot.current = defaults; setDraft(defaults); setSelectedApp(app); }} className={cn("rounded-md px-3 py-2 capitalize", selectedApp === app && "bg-[#fff0f4] text-[#bd1749]")}>{app} app</button>)}
           </div>
           <button
             onClick={() => overview.refetch()}
