@@ -57,6 +57,10 @@ type ControlConfig = {
     }
   >;
   services: Record<string, { status: string; message: string }>;
+  media: {
+    hero: { imageUrl: string };
+    services: Record<string, { imageUrl: string }>;
+  };
 };
 type Item = {
   _id: string;
@@ -119,6 +123,7 @@ const defaults: ControlConfig = {
   ui: { homeTitle: "", homeSubtitle: "", primaryColor: "#f32368", hiddenSections: [] },
   features: {},
   services: {},
+  media: { hero: { imageUrl: "" }, services: {} },
 };
 const modes = [
   "LIVE",
@@ -223,7 +228,7 @@ export function AppControlCenter() {
     | "updates"
     | "ui"
     | "announcements"
-    | "banners"
+    | "media"
     | "audit"
   >("status");
   const [draft, setDraft] = useState<ControlConfig>(defaults);
@@ -250,7 +255,7 @@ export function AppControlCenter() {
     window.history.replaceState({}, "", url);
     setEditing(null);
     setSearch("");
-    if (selectedApp === "partner" && ["launch", "services", "banners"].includes(tab)) setTab("status");
+    if (selectedApp === "partner" && ["launch", "services", "media"].includes(tab)) setTab("status");
   }, [selectedApp, tab, queryLoaded]);
   const overview = useQuery({
     queryKey: ["app-control-overview", selectedApp],
@@ -276,9 +281,9 @@ export function AppControlCenter() {
     queryKey: ["app-control-items", selectedApp, tab, search],
     queryFn: () =>
       api<{ items: Item[] }>(
-        controlPath(`/${tab === "announcements" ? "announcement" : "banner"}?search=${encodeURIComponent(search)}`),
+        controlPath(`/announcement?search=${encodeURIComponent(search)}`),
       ),
-    enabled: tab === "announcements" || tab === "banners",
+    enabled: tab === "announcements",
   });
   const audit = useQuery({
     queryKey: ["app-control-audit", selectedApp],
@@ -358,7 +363,7 @@ export function AppControlCenter() {
   const displayedItems = useMemo(() => items.data?.items || [], [items.data]);
   const tabs: Array<typeof tab> = selectedApp === "partner"
     ? ["status", "ui", "features", "updates", "announcements", "audit"]
-    : ["status", "launch", "services", "ui", "features", "updates", "announcements", "banners", "audit"];
+    : ["status", "launch", "services", "ui", "features", "updates", "announcements", "media", "audit"];
   const input =
     "h-10 w-full rounded-lg border border-[#e6eaf2] bg-white px-3 text-sm outline-none focus:border-[#f32368]";
   return (
@@ -401,7 +406,7 @@ export function AppControlCenter() {
         {[
           ["Published version", overview.data?.version || 0, ShieldCheck],
           ["Announcements", overview.data?.counts.announcements || 0, Bell],
-          [selectedApp === "partner" ? "Active partners" : "Banners", selectedApp === "partner" ? overview.data?.counts.activePartners || 0 : overview.data?.counts.banners || 0, Megaphone],
+          [selectedApp === "partner" ? "Active partners" : "Images", selectedApp === "partner" ? overview.data?.counts.activePartners || 0 : CUSTOMER_SERVICE_CATALOG.length + 1, Megaphone],
           ["Audit actions", overview.data?.counts.auditLogs || 0, MonitorCog],
         ].map(([label, value, Icon]) => {
           const C = Icon as typeof ShieldCheck;
@@ -428,7 +433,7 @@ export function AppControlCenter() {
                 : "border-transparent text-[#667085]",
             )}
           >
-            {name === "updates" ? "Update Management" : name}
+            {name === "updates" ? "Update Management" : name === "media" ? "Images" : name}
           </button>
         ))}
       </nav>
@@ -550,9 +555,9 @@ export function AppControlCenter() {
           onChange={(update) => setSection("update", update)}
         />
       )}
-      {(tab === "announcements" || tab === "banners") && (
+      {tab === "announcements" && (
         <ContentManager
-          kind={tab === "announcements" ? "announcement" : "banner"}
+          kind="announcement"
           input={input}
           items={displayedItems}
           search={search}
@@ -560,6 +565,13 @@ export function AppControlCenter() {
           editing={editing}
           setEditing={setEditing}
           mutation={content}
+        />
+      )}
+      {tab === "media" && (
+        <MediaManager
+          config={config}
+          services={overview.data?.services?.length ? overview.data.services : CUSTOMER_SERVICE_CATALOG}
+          onChange={(media) => setSection("media", media)}
         />
       )}
       {tab === "audit" && (
@@ -1068,6 +1080,104 @@ function UpdateControls({
         })}
       </div>
       <p className="text-xs font-semibold text-[#667085]">Your choice is saved as a draft. Publish changes to send the selected update experience to customer devices.</p>
+    </section>
+  );
+}
+
+const MEDIA_FALLBACKS: Record<string, string> = {
+  ac: "/customer-media/service_home_ac.jpg",
+  electrician: "/customer-media/service_home_electrician.jpg",
+  plumbing: "/customer-media/service_home_plumbing.jpg",
+  carpenter: "/customer-media/service_home_carpenter.jpg",
+  painting: "/customer-media/service_home_painting.jpg",
+  interior: "/customer-media/service_home_interior.jpg",
+  roadside: "/customer-media/service_home_roadside.jpg",
+  cleaning: "/customer-media/service_home_cleaning.jpg",
+  laundry: "/customer-media/service_home_laundry.jpg",
+  pest: "/customer-media/service_home_pest.jpg",
+  appliances: "/customer-media/service_home_appliances.jpg",
+  ro: "/customer-media/service_home_ro.jpg",
+};
+const HERO_FALLBACK = "/customer-media/hero_ro_background.jpg";
+
+function MediaManager({
+  config,
+  services,
+  onChange,
+}: {
+  config: ControlConfig;
+  services: ServiceSummary[];
+  onChange: (value: ControlConfig["media"]) => void;
+}) {
+  const [uploading, setUploading] = useState<string>("");
+  const [error, setError] = useState("");
+  const media = config.media || defaults.media;
+  const replace = async (target: "hero" | string, file?: File) => {
+    if (!file) return;
+    if (!/image\/(jpeg|png|webp)/.test(file.type) || file.size > 5 * 1024 * 1024) {
+      setError("Use a JPG, PNG, or WebP image up to 5 MB.");
+      return;
+    }
+    setError("");
+    setUploading(target);
+    try {
+      const form = new FormData();
+      form.append("image", file);
+      const response = await fetch("/api/admin/control-center/media/upload", { method: "POST", body: form });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.imageUrl) throw new Error(payload.message || "Image upload failed");
+      if (target === "hero") onChange({ ...media, hero: { imageUrl: payload.imageUrl } });
+      else onChange({ ...media, services: { ...media.services, [target]: { imageUrl: payload.imageUrl } } });
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Image upload failed");
+    } finally {
+      setUploading("");
+    }
+  };
+  const reset = (target: "hero" | string) => {
+    if (target === "hero") onChange({ ...media, hero: { imageUrl: "" } });
+    else onChange({ ...media, services: { ...media.services, [target]: { imageUrl: "" } } });
+  };
+  const ImageButton = ({ target, label }: { target: "hero" | string; label: string }) => (
+    <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-[#f2bed0] bg-[#fff9fb] px-3 text-xs font-black text-[#c51d58] transition hover:bg-[#fff0f4]">
+      {uploading === target ? "Uploading…" : label}
+      <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={Boolean(uploading)} onChange={(event) => { void replace(target, event.target.files?.[0]); event.currentTarget.value = ""; }} />
+    </label>
+  );
+  const knownServices = services.filter((service) => Boolean(MEDIA_FALLBACKS[service.serviceCategory]));
+  return (
+    <section className="space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-black">Images</h2>
+          <p className="mt-1 text-sm text-[#667085]">Manage the live customer-app hero and service artwork. Uploaded media stays in the draft until Publish changes.</p>
+        </div>
+        <span className="rounded-full border border-[#dbe3fa] bg-[#f4f6ff] px-4 py-2 font-mono text-xs text-[#46506b]">{knownServices.length + 1} images · 1 hero · {knownServices.length} services</span>
+      </header>
+      {error && <p className="rounded-lg border border-[#f7bfd0] bg-[#fff5f7] px-4 py-3 text-sm font-bold text-[#bd1749]">{error}</p>}
+      <article className="admin-card overflow-hidden p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div><h3 className="text-lg font-black">Hero Image</h3><p className="mt-1 text-sm text-[#667085]">The main promotional image shown behind the customer home hero.</p></div>
+          <div className="flex gap-2"><span className="rounded-full bg-[#eafaf2] px-3 py-1.5 text-xs font-black text-[#16845b]">● {media.hero.imageUrl ? "Draft override" : "Bundled fallback"}</span><ImageButton target="hero" label="Change Image" /></div>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-[#edf0f6] bg-[#fff8f7]"><img src={media.hero.imageUrl || HERO_FALLBACK} alt="Customer home hero" className="h-48 w-full object-cover sm:h-64" onError={(event) => { event.currentTarget.src = HERO_FALLBACK; }} /></div>
+        {media.hero.imageUrl && <button type="button" onClick={() => reset("hero")} className="mt-3 text-xs font-black text-[#667085] underline">Restore bundled hero</button>}
+      </article>
+      <article className="admin-card p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-black">Service Images</h3><p className="mt-1 text-sm text-[#667085]">The actual image used by each customer service card and its matching home carousel slide.</p></div></div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {knownServices.map((service) => {
+            const id = service.serviceCategory;
+            const remote = media.services?.[id]?.imageUrl || "";
+            const fallback = MEDIA_FALLBACKS[id];
+            return <div key={id} className="overflow-hidden rounded-xl border border-[#e7eaf0] bg-white">
+              <img src={remote || fallback} alt={`${service.name} service`} className="h-32 w-full object-cover" onError={(event) => { event.currentTarget.src = fallback; }} />
+              <div className="p-3"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-black">{service.name}</p><span className={remote ? "rounded-full bg-[#fff0dd] px-2 py-1 text-[10px] font-black text-[#b76800]" : "rounded-full bg-[#eafaf2] px-2 py-1 text-[10px] font-black text-[#16845b]"}>{remote ? "Draft" : "Active"}</span></div><div className="mt-3 flex gap-2"><ImageButton target={id} label="Change Image" />{remote && <button type="button" onClick={() => reset(id)} className="text-xs font-black text-[#667085] underline">Discard</button>}</div></div>
+            </div>;
+          })}
+        </div>
+      </article>
+      <p className="text-xs text-[#667085]">JPG, PNG, or WebP · maximum 5 MB. Android keeps the signed bundled artwork as an offline and failed-load fallback.</p>
     </section>
   );
 }
