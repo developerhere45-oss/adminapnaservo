@@ -285,17 +285,6 @@ export function AppControlCenter() {
     },
     onError: (error: Error) => setMessage(error.message),
   });
-  const openBookings = useMutation({
-    mutationFn: () =>
-      api<{ published: ControlConfig }>(controlPath("/open-bookings"), { method: "POST" }),
-    onSuccess: (result) => {
-      setDraft(result.published);
-      setMessage("Launch screen removed. Customer booking flow is now live.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
-      queryClient.invalidateQueries({ queryKey: ["app-control-audit", selectedApp] });
-    },
-    onError: (error: Error) => setMessage(error.message),
-  });
   const content = useMutation({
     mutationFn: ({ method, item }: { method: string; item: Partial<Item> }) =>
       api<{ ok?: boolean; item?: Item }>(
@@ -433,76 +422,54 @@ export function AppControlCenter() {
           <Preview config={config} />
         </section>
       )}
-      {tab === "launch" && (
-        <section className="admin-card grid gap-4 p-5 lg:grid-cols-2">
-          <div className="space-y-3">
-            <h2 className="text-lg font-black">Launch Configuration</h2>
-            <p className="text-sm text-[#667085]">
-              Remove the launch screen manually when you are ready to start
-              customer bookings.
-            </p>
-            <Toggle
-              label="Show launch screen"
-              value={config.launch.enabled}
-              onChange={(enabled) =>
-                setSection("launch", { ...config.launch, enabled })
-              }
-            />
-            <button
-              type="button"
-              onClick={() =>
-                window.confirm(
-                  "Remove the launch screen and open customer bookings now?",
-                ) && openBookings.mutate()
-              }
-              disabled={openBookings.isPending}
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-[#f32368] px-4 text-sm font-black text-white disabled:opacity-60"
-            >
-              {openBookings.isPending
-                ? "Opening bookings..."
-                : "Remove launch screen & open bookings"}
+      {tab === "launch" && (() => {
+        const publishedLaunch = overview.data?.published.launch.enabled ?? false;
+        const draftLaunch = config.launch.enabled;
+        const hasChanges = Boolean(overview.data) && publishedLaunch !== draftLaunch;
+        const setLaunchScreen = (enabled: boolean) => setSection("launch", { ...config.launch, enabled });
+        const publishedLabel = publishedLaunch ? "Launch Screen" : "Customer App Open";
+        const draftLabel = draftLaunch ? "Launch Screen" : "Customer App Open";
+        return <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="space-y-4">
+            <div className={cn("rounded-xl border px-4 py-3", publishedLaunch ? "border-[#f5d7a6] bg-[#fff9ed]" : "border-[#b9e8da] bg-[#effcf8]")}>
+              <div className="flex items-center gap-2 text-sm font-black text-[#344054]">
+                <span className={publishedLaunch ? "text-[#c97800]" : "text-[#078a61]"}>{publishedLaunch ? "◉" : "●"}</span>
+                {publishedLaunch ? "Customer Launch Screen is Active" : "Customer App is Open"}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-[#667085]">{publishedLaunch ? "Customers see the holding screen and cannot create bookings. This is the published state." : "Customers can currently access the app and create bookings. This is the published state."}</p>
+            </div>
+            <p className="pt-1 text-[11px] font-black tracking-wide text-[#7a4d57]">WHAT SHOULD CUSTOMERS SEE?</p>
+            <button type="button" aria-pressed={draftLaunch} onClick={() => setLaunchScreen(true)} className={cn("w-full rounded-xl border-2 p-4 text-left transition", draftLaunch ? "border-[#f32368] bg-[#fff8fa]" : "border-[#f1d6dc] bg-white hover:border-[#f4a2b9]")}>
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e9f1ff] text-xl">▯</span>
+                <span><span className="block text-sm font-black text-[#344054]">Show Launch Screen</span><span className="mt-1 block text-xs leading-5 text-[#667085]">Customers will see the launch screen when they open the app. Customer bookings remain unavailable.</span></span>
+                {draftLaunch && <span className="ml-auto rounded bg-[#fff0f4] px-2 py-1 text-[10px] font-black text-[#bd1749]">Selected</span>}
+              </div>
             </button>
-            {(
-              [
-                ["launchAt", "datetime-local"],
-                ["timezone", "text"],
-                ["title", "text"],
-                ["dateText", "text"],
-                ["ctaText", "text"],
-                ["imageUrl", "url"],
-              ] as const
-            ).map(([key, type]) => (
-              <input
-                key={key}
-                type={type}
-                className={input}
-                placeholder={key}
-                value={config.launch[key] || ""}
-                onChange={(e) =>
-                  setDraft({
-                    ...config,
-                    launch: { ...config.launch, [key]: e.target.value },
-                  })
-                }
-                onBlur={() => setSection("launch", draft.launch)}
-              />
-            ))}
-            <textarea
-              className="min-h-24 w-full rounded-lg border border-[#e6eaf2] p-3 text-sm"
-              placeholder="Description"
-              value={config.launch.description}
-              onChange={(e) =>
-                setDraft({
-                  ...config,
-                  launch: { ...config.launch, description: e.target.value },
-                })
-              }
-              onBlur={() => setSection("launch", draft.launch)}
-            />
+            <button type="button" aria-pressed={!draftLaunch} onClick={() => setLaunchScreen(false)} className={cn("w-full rounded-xl border-2 p-4 text-left transition", !draftLaunch ? "border-[#078a61] bg-[#f5fffb]" : "border-[#f1d6dc] bg-white hover:border-[#a5dfcc]")}>
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#dff5ed] text-xl">🚀</span>
+                <span><span className="flex items-center gap-2 text-sm font-black text-[#344054]">Open Customer App {!draftLaunch && <span className="rounded bg-[#dff5ed] px-2 py-1 text-[10px] text-[#067647]">Currently active</span>}</span><span className="mt-1 block text-xs leading-5 text-[#667085]">Remove the launch screen and allow customers to access the app and create bookings.</span></span>
+              </div>
+            </button>
           </div>
-          <Preview config={config} />
-        </section>
-      )}
+          <aside className="space-y-4">
+            <div className="rounded-xl border border-[#f1cbd4] bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-black tracking-wide text-[#7a4d57]">PUBLISH STATUS</p>
+              <div className="mt-4 space-y-3 text-xs text-[#667085]">
+                <p className="flex justify-between gap-3"><span>Published:</span><span className="font-bold text-[#344054]"><i className="mr-1 text-[#078a61]">●</i>{publishedLabel}</span></p>
+                <p className="flex justify-between gap-3"><span>Draft:</span><span className="font-bold text-[#344054]"><i className={cn("mr-1", hasChanges ? "text-[#c97800]" : "text-[#078a61]")}>●</i>{draftLabel}</span></p>
+              </div>
+              <button type="button" onClick={() => publish.mutate()} disabled={!hasChanges || publish.isPending} className="mt-5 h-10 w-full rounded-lg bg-[#f32368] text-xs font-black text-white disabled:bg-[#e7effc] disabled:text-[#a6afbd]">{publish.isPending ? "Publishing…" : "Publish changes"}</button>
+              <p className="mt-3 text-center text-[10px] font-bold text-[#98a2b3]">{hasChanges ? "Pending changes need publishing" : "No pending changes"}</p>
+            </div>
+            <div className="rounded-xl border border-[#cbdcf8] bg-[#eaf2ff] p-4 text-xs leading-5 text-[#475467]">
+              <p className="font-black text-[#344054]">💡 How Launch Control Works</p>
+              <ol className="mt-3 list-decimal space-y-2 pl-4"><li><b>Show Launch Screen:</b> Holds customer bookings.</li><li><b>Open Customer App:</b> Allows customers to browse and book.</li><li><b>Publish changes:</b> Sends the draft state live to customer devices.</li></ol>
+            </div>
+          </aside>
+        </section>;
+      })()}
       {tab === "services" && (
         <ServiceControls
           config={config}
