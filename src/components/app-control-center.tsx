@@ -598,27 +598,46 @@ export function AppControlCenter() {
 
 function Preview({ config }: { config: ControlConfig }) {
   const mode = config.appStatus.mode;
+  const selected = modeDetails[mode] || modeDetails.LIVE;
+  const Icon = selected.Icon;
+  const blocking = mode === "HIGH_DEMAND" || mode === "MAINTENANCE";
   const details = mode === "MAINTENANCE"
-    ? { title: "ApnaServo is Under Maintenance", message: "We are currently performing some maintenance to improve your experience.", booking: "Blocked" }
+    ? { title: "ApnaServo is Under Maintenance", message: "We are currently performing some maintenance to improve your experience.", booking: "Booking blocked", screen: "Maintenance popup" }
     : mode === "HIGH_DEMAND"
-      ? { title: "App is facing high demand", message: "We are currently receiving a high number of service requests.", booking: "Temporarily paused" }
+      ? { title: "App is facing high demand", message: "We are currently receiving a high number of service requests.", booking: "Booking paused", screen: "High-demand popup" }
       : mode === "PARTIALLY_AVAILABLE"
-        ? { title: "ApnaServo is partially available", message: "Some services may be temporarily unavailable.", booking: "Available" }
-        : { title: "ApnaServo is live", message: "Your trusted home services app.", booking: "Available" };
+        ? { title: "ApnaServo is partially available", message: "Some services may be temporarily unavailable.", booking: "Booking available", screen: "Customer home" }
+        : { title: "ApnaServo is live", message: "Your trusted home services app.", booking: "Booking available", screen: "Customer home" };
   return (
     <aside className="rounded-2xl border border-[#f3d4dd] bg-[#fffafb] p-5">
       <p className="text-xs font-black text-[#f32368]">LIVE CUSTOMER PREVIEW</p>
-      <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
-        <Rocket className="text-[#f32368]" size={30} />
-        <h3 className="mt-4 text-xl font-black">
-          {details.title}
-        </h3>
-        <p className="mt-2 text-sm text-[#667085]">
-          {details.message}
-        </p>
-        <p className="mt-5 rounded-lg bg-[#fff0f4] px-3 py-2 text-xs font-black text-[#bd1749]">
-          Booking: {details.booking}
-        </p>
+      <div className="mt-3 flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-black text-[#344054]">
+        <Icon size={16} className={selected.tone} />
+        <span>USER SEES: {details.screen}</span>
+      </div>
+      <div className="mx-auto mt-4 w-full max-w-[280px] rounded-[2.25rem] border-[6px] border-[#e5e7eb] bg-white p-2 shadow-md">
+        <div className="mx-auto h-5 w-24 rounded-b-xl bg-[#e5e7eb]" />
+        <div className="mt-1 min-h-[360px] overflow-hidden rounded-[1.65rem] bg-[#fafcff] p-4">
+          <div className="flex items-center gap-2 text-sm font-black text-[#bd1749]"><Rocket size={17} /> ApnaServo</div>
+          {blocking ? (
+            <div className="mt-8 rounded-2xl bg-white px-4 py-6 text-center shadow-sm ring-1 ring-[#f5dce3]">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#fff0f4]"><Icon size={29} className={selected.tone} /></div>
+              <h3 className="mt-4 text-lg font-black leading-6 text-[#1d2939]">{details.title}</h3>
+              <p className="mt-3 text-xs leading-5 text-[#667085]">{details.message}</p>
+              <p className="mt-5 rounded-lg bg-[#f32368] px-3 py-2 text-xs font-black text-white">{mode === "MAINTENANCE" ? "Okay, Got It" : "Okay"}</p>
+            </div>
+          ) : (
+            <>
+              <p className="mt-7 text-xl font-black text-[#1d2939]">Hi, Rahul 👋</p>
+              <p className="mt-1 text-sm text-[#667085]">How can we help you today?</p>
+              <div className="mt-5 rounded-xl border border-[#edf0f6] bg-white px-3 py-3 text-xs text-[#98a2b3]">Search for services...</div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {['AC Repair', 'Electrician', 'Cleaning', 'Plumbing'].map((service) => <div key={service} className="rounded-xl bg-white p-3 text-center text-[11px] font-black text-[#344054] shadow-sm">{service}</div>)}
+              </div>
+              <p className="mt-6 rounded-lg bg-[#e8fff7] px-3 py-2 text-center text-xs font-black text-[#067647]">{details.booking}</p>
+            </>
+          )}
+        </div>
       </div>
     </aside>
   );
