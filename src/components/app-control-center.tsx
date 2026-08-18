@@ -329,7 +329,10 @@ export function AppControlCenter() {
   });
   const config = overview.data ? draft : current;
   const setSection = (section: keyof ControlConfig, value: unknown) => {
-    const next = { ...config, [section]: value };
+    // Update the visual draft first. The serialized save queue then persists
+    // the exact state in order, so changing several services cannot make an
+    // earlier network response overwrite a later selection.
+    const next = { ...draft, [section]: value };
     setDraft(next);
     const app = selectedApp;
     draftSaveQueue.current = draftSaveQueue.current
@@ -500,6 +503,7 @@ export function AppControlCenter() {
           config={config}
           input={input}
           services={overview.data?.services?.length ? overview.data.services : CUSTOMER_SERVICE_CATALOG}
+          saving={save.isPending}
           onChange={(services) => setSection("services", services)}
         />
       )}
@@ -638,11 +642,13 @@ function ServiceControls({
   config,
   input,
   services,
+  saving,
   onChange,
 }: {
   config: ControlConfig;
   input: string;
   services: ServiceSummary[];
+  saving: boolean;
   onChange: (value: ControlConfig["services"]) => void;
 }) {
   const [selected, setSelected] = useState("");
@@ -652,9 +658,7 @@ function ServiceControls({
       .toLowerCase()
       .includes(filter.toLowerCase()),
   );
-  const selectedService =
-    services.find((service) => service.serviceCategory === selected) ||
-    visible[0];
+  const selectedService = services.find((service) => service.serviceCategory === selected);
   const key = selectedService?.serviceCategory || "";
   const item = config.services[key] || {
     status:
@@ -664,14 +668,15 @@ function ServiceControls({
   };
   const save = (patch: Partial<typeof item>) =>
     key && onChange({ ...config.services, [key]: { ...item, ...patch } });
+  const stateFor = (service: ServiceSummary) =>
+    config.services[service.serviceCategory]?.status ||
+    service.availability ||
+    (service.isActive === false ? "DISABLED" : "AVAILABLE");
   const labelFor = (state: string) => state === "TEMPORARILY_UNAVAILABLE" || state === "DISABLED" ? "Not available" : state.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const blocksBooking = (state: string) => ["PREPARING", "TEMPORARILY_UNAVAILABLE", "DISABLED", "HIGH_DEMAND"].includes(state);
   const counts = services.reduce(
     (total, service) => {
-      const state =
-        config.services[service.serviceCategory]?.status ||
-        service.availability ||
-        (service.isActive === false ? "DISABLED" : "AVAILABLE");
+      const state = stateFor(service);
       total[state] = (total[state] || 0) + 1;
       return total;
     },
@@ -725,24 +730,24 @@ function ServiceControls({
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[620px] text-left text-sm">
               <thead className="bg-[#fbfcfe] text-xs text-[#667085]">
                 <tr>
                   <th className="px-5 py-4">Service</th>
                   <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Booking</th>
                   <th className="px-5 py-4">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((service) => {
-                  const state =
-                    config.services[service.serviceCategory]?.status ||
-                    service.availability ||
-                    (service.isActive === false ? "DISABLED" : "AVAILABLE");
-                  const bookable = !blocksBooking(state);
+                  const state = stateFor(service);
+                  const isSelected = selected === service.serviceCategory;
                   return (
-                    <tr key={service._id} className="border-t border-[#edf0f6]">
+                    <tr
+                      key={service._id}
+                      onClick={() => setSelected(service.serviceCategory)}
+                      className={cn("cursor-pointer border-t border-[#edf0f6] transition hover:bg-[#fff7f9]", isSelected && "bg-[#fff1f5]")}
+                    >
                       <td className="px-5 py-4">
                         <p className="font-black">{service.name}</p>
                         <p className="mt-1 text-xs text-[#667085]">
@@ -766,21 +771,14 @@ function ServiceControls({
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <span
-                          className={cn(
-                            "font-bold",
-                            bookable ? "text-emerald-700" : "text-rose-600",
-                          )}
-                        >
-                          {bookable ? "Booking enabled" : state === "HIGH_DEMAND" ? "Booking disabled • High demand" : "Booking disabled"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
                         <button
-                          onClick={() => setSelected(service.serviceCategory)}
-                          className="rounded-lg border border-[#e6eaf2] px-3 py-2 text-xs font-black"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelected(service.serviceCategory);
+                          }}
+                          className={cn("rounded-lg border px-3 py-2 text-xs font-black transition", isSelected ? "border-[#f32368] bg-[#f32368] text-white" : "border-[#e6eaf2] hover:border-[#f32368] hover:text-[#bd1749]")}
                         >
-                          Change Status
+                          {isSelected ? "Selected" : "Change Status"}
                         </button>
                       </td>
                     </tr>
@@ -789,7 +787,7 @@ function ServiceControls({
                 {!visible.length && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={3}
                       className="px-5 py-12 text-center text-[#667085]"
                     >
                       No services found in the live service catalog.
@@ -801,24 +799,33 @@ function ServiceControls({
           </div>
         </div>
         <aside className="admin-card h-fit p-5">
-          <h3 className="text-lg font-black">
-            {selectedService?.name || "Service details"}
-          </h3>
+          <h3 className="text-lg font-black">{selectedService?.name || "Service details"}</h3>
           {selectedService ? (
             <div className="mt-4 space-y-4">
               <p className="text-sm text-[#667085]">{selectedService.description || "Set the published customer booking experience for this real service."}</p>
-              <label className="block text-xs font-bold text-[#667085]">
-                Change Status
-                <select
-                  className={cn(input, "mt-1")}
-                  value={item.status}
-                  onChange={(event) => save({ status: event.target.value })}
-                >
+              <div>
+                <p className="text-xs font-black text-[#667085]">CHOOSE CUSTOMER STATUS</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   {serviceStates.filter((state) => state !== "DISABLED").map((state) => (
-                    <option key={state} value={state}>{labelFor(state)}</option>
+                    <button
+                      key={state}
+                      type="button"
+                      onClick={() => save({ status: state })}
+                      className={cn(
+                        "rounded-lg border px-2 py-2 text-xs font-black transition",
+                        item.status === state
+                          ? "border-[#f32368] bg-[#fff0f4] text-[#bd1749]"
+                          : "border-[#e6eaf2] bg-white text-[#475467] hover:border-[#f3a1b9]",
+                      )}
+                    >
+                      {labelFor(state)}
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
+              <p className="rounded-lg bg-[#f7f8fa] px-3 py-2 text-xs font-bold text-[#344054]">
+                Selected: {selectedService.name} · {labelFor(item.status)} {saving ? "· Saving draft…" : "· Draft saved"}
+              </p>
               <div className={cn("rounded-xl border p-3 text-xs", item.status === "HIGH_DEMAND" ? "border-[#f6d2d7] bg-[#fff7f8]" : blocksBooking(item.status) ? "border-[#f5dfb7] bg-[#fffaf0]" : "border-[#bfe9d8] bg-[#f3fffa]")}>
                 <p className="font-black text-[#344054]">Customer preview</p>
                 <p className="mt-1 leading-5 text-[#667085]">{item.status === "HIGH_DEMAND" ? "High demand for this service popup. Booking is blocked only for this service." : blocksBooking(item.status) ? "We're Preparing This Service screen. Booking is blocked only for this service." : "Normal booking flow. This service remains available to customers."}</p>
@@ -832,10 +839,7 @@ function ServiceControls({
                 placeholder="Optional customer message"
                 />
               </label>
-              <p className="text-xs text-[#667085]">
-                Changes are saved as a draft. Use Publish changes to make them
-                live.
-              </p>
+              <p className="text-xs text-[#667085]">Status updates immediately in this draft. Click Publish changes once to broadcast it to customer devices.</p>
             </div>
           ) : (
             <p className="mt-3 text-sm text-[#667085]">
