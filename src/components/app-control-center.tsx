@@ -639,6 +639,8 @@ function ServiceControls({
   };
   const save = (patch: Partial<typeof item>) =>
     key && onChange({ ...config.services, [key]: { ...item, ...patch } });
+  const labelFor = (state: string) => state === "TEMPORARILY_UNAVAILABLE" || state === "DISABLED" ? "Not available" : state.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const blocksBooking = (state: string) => ["PREPARING", "TEMPORARILY_UNAVAILABLE", "DISABLED", "HIGH_DEMAND"].includes(state);
   const counts = services.reduce(
     (total, service) => {
       const state =
@@ -665,7 +667,7 @@ function ServiceControls({
           ["PREPARING", "Preparing", "bg-amber-50 text-amber-700"],
           [
             "TEMPORARILY_UNAVAILABLE",
-            "Unavailable",
+            "Not available",
             "bg-rose-50 text-rose-700",
           ],
           ["HIGH_DEMAND", "High demand", "bg-blue-50 text-blue-700"],
@@ -713,11 +715,7 @@ function ServiceControls({
                     config.services[service.serviceCategory]?.status ||
                     service.availability ||
                     (service.isActive === false ? "DISABLED" : "AVAILABLE");
-                  const bookable = ![
-                    "PREPARING",
-                    "TEMPORARILY_UNAVAILABLE",
-                    "DISABLED",
-                  ].includes(state);
+                  const bookable = !blocksBooking(state);
                   return (
                     <tr key={service._id} className="border-t border-[#edf0f6]">
                       <td className="px-5 py-4">
@@ -739,7 +737,7 @@ function ServiceControls({
                                   : "bg-rose-50 text-rose-700",
                           )}
                         >
-                          {state.replace(/_/g, " ")}
+                          {labelFor(state)}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -749,7 +747,7 @@ function ServiceControls({
                             bookable ? "text-emerald-700" : "text-rose-600",
                           )}
                         >
-                          {bookable ? "Enabled" : "Disabled"}
+                          {bookable ? "Booking enabled" : state === "HIGH_DEMAND" ? "Booking disabled • High demand" : "Booking disabled"}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -757,7 +755,7 @@ function ServiceControls({
                           onClick={() => setSelected(service.serviceCategory)}
                           className="rounded-lg border border-[#e6eaf2] px-3 py-2 text-xs font-black"
                         >
-                          Manage
+                          Change Status
                         </button>
                       </td>
                     </tr>
@@ -783,46 +781,22 @@ function ServiceControls({
           </h3>
           {selectedService ? (
             <div className="mt-4 space-y-4">
-              <p className="text-sm text-[#667085]">
-                {selectedService.description ||
-                  "Set customer visibility and booking availability."}
-              </p>
+              <p className="text-sm text-[#667085]">{selectedService.description || "Set the published customer booking experience for this real service."}</p>
               <label className="block text-xs font-bold text-[#667085]">
-                Status
+                Change Status
                 <select
                   className={cn(input, "mt-1")}
                   value={item.status}
                   onChange={(event) => save({ status: event.target.value })}
                 >
-                  {serviceStates.map((state) => (
-                    <option key={state}>{state}</option>
+                  {serviceStates.filter((state) => state !== "DISABLED").map((state) => (
+                    <option key={state} value={state}>{labelFor(state)}</option>
                   ))}
                 </select>
               </label>
-              <div>
-                <Toggle
-                  label={
-                    ![
-                      "PREPARING",
-                      "TEMPORARILY_UNAVAILABLE",
-                      "DISABLED",
-                    ].includes(item.status)
-                      ? "Booking enabled"
-                      : "Booking disabled"
-                  }
-                  value={
-                    ![
-                      "PREPARING",
-                      "TEMPORARILY_UNAVAILABLE",
-                      "DISABLED",
-                    ].includes(item.status)
-                  }
-                  onChange={(enabled) =>
-                    save({
-                      status: enabled ? "AVAILABLE" : "TEMPORARILY_UNAVAILABLE",
-                    })
-                  }
-                />
+              <div className={cn("rounded-xl border p-3 text-xs", item.status === "HIGH_DEMAND" ? "border-[#f6d2d7] bg-[#fff7f8]" : blocksBooking(item.status) ? "border-[#f5dfb7] bg-[#fffaf0]" : "border-[#bfe9d8] bg-[#f3fffa]")}>
+                <p className="font-black text-[#344054]">Customer preview</p>
+                <p className="mt-1 leading-5 text-[#667085]">{item.status === "HIGH_DEMAND" ? "High demand for this service popup. Booking is blocked only for this service." : blocksBooking(item.status) ? "We're Preparing This Service screen. Booking is blocked only for this service." : "Normal booking flow. This service remains available to customers."}</p>
               </div>
               <label className="block text-xs font-bold text-[#667085]">
                 Customer message
@@ -830,7 +804,7 @@ function ServiceControls({
                   className="mt-1 min-h-24 w-full rounded-lg border border-[#e6eaf2] p-3 text-sm"
                   value={item.message}
                   onChange={(event) => save({ message: event.target.value })}
-                  placeholder="Explain service availability"
+                placeholder="Optional customer message"
                 />
               </label>
               <p className="text-xs text-[#667085]">
