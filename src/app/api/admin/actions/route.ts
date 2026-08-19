@@ -4,7 +4,7 @@ import { getAdminSession, requirePermission } from "@/lib/auth";
 import { fetchBackendJson } from "@/lib/backend";
 
 const schema = z.object({
-  action: z.enum(["approve-technician", "reject-technician", "suspend-technician", "block-technician", "delete-partner", "delete-device", "assign-booking", "send-notification", "resolve-complaint"]),
+  action: z.enum(["approve-technician", "reject-technician", "suspend-technician", "block-technician", "resume-partner", "delete-partner", "delete-device", "assign-booking", "send-notification", "resolve-complaint"]),
   targetId: z.string().min(1),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
@@ -14,6 +14,7 @@ const permissionsByAction: Record<z.infer<typeof schema>["action"], string> = {
   "reject-technician": "technicians:manage",
   "suspend-technician": "technicians:manage",
   "block-technician": "technicians:manage",
+  "resume-partner": "technicians:manage",
   "delete-partner": "technicians:manage",
   "delete-device": "technicians:manage",
   "assign-booking": "bookings:manage",

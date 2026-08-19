@@ -23,6 +23,7 @@ import {
   MessageSquare,
   MoreVertical,
   RefreshCw,
+  RotateCcw,
   Search,
   Settings,
   Star,
@@ -604,6 +605,7 @@ function DataTable({
                   ) : resource === "partners" && row.id ? (
                     <div className="flex min-w-[150px] gap-2" onClick={(event) => event.stopPropagation()}>
                       <button className="grid h-9 w-10 place-items-center rounded-lg border border-[#e6eaf2]" onClick={() => onSelect(row)} aria-label="View partner"><Eye size={16} /></button>
+                      {partnerApprovalState(row).blocked && <button disabled={pendingAction === `${row.id}:resume-partner`} className="grid h-9 w-10 place-items-center rounded-lg border border-[#a7f3d0] bg-[#ecfdf3] text-[#067647] disabled:opacity-60" aria-label="Resume partner" onClick={() => { if (window.confirm("Resume this verified partner? They can go online and receive bookings again.")) onAdminAction("resume-partner", String(row.id)); }}><RotateCcw size={15} /></button>}
                       <button
                         disabled={pendingAction === `${row.id}:block-technician`}
                         className="grid h-9 w-10 place-items-center rounded-lg border border-[#ffd3dc] bg-white text-[#d92d4b] disabled:opacity-60"
@@ -819,6 +821,9 @@ function PartnerDetailPanel({
                 >
                   <XCircle size={15} />Block
                 </button>
+              )}
+              {approvalState.blocked && (
+                <button disabled={pendingAction === `${partnerId}:resume-partner`} onClick={() => { if (window.confirm("Resume this verified partner? They can go online and receive bookings again.")) onAdminAction("resume-partner", partnerId); }} className="flex h-10 items-center gap-2 rounded-lg bg-[#079455] px-4 text-xs font-black text-white disabled:opacity-60"><RotateCcw size={15} />Resume Partner</button>
               )}
               <button
                 disabled={pendingAction === `${partnerId}:delete-partner`}
