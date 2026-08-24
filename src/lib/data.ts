@@ -23,7 +23,9 @@ export function sanitizeAdminData<T>(value: T): T {
 
 export function normalizeAdminRow(row: Row): Row {
   const customerName = firstValue(row.customerName, row.userName, row.fullName, row.ownerType === "user" ? row.ownerName : "", row.name);
-  const customerPhone = firstValue(row.customerPhone, row.customerMobile, row.userMobile, row.mobileNumber, row.phone);
+  // Booking contact is the number the customer explicitly supplied for that
+  // job. Keep account-level fields only as compatibility fallbacks.
+  const customerPhone = firstValue(row.primaryPhone, row.customerPhone, row.customerMobile, row.userMobile, row.mobileNumber, row.phone);
   const partnerName = firstValue(row.partnerName, row.assignedPartnerName, row.ownerType === "partner" ? row.ownerName : "");
   const partnerPhone = firstValue(row.partnerPhone, row.partnerMobile, row.assignedPartnerMobileNumber);
 
@@ -32,7 +34,7 @@ export function normalizeAdminRow(row: Row): Row {
     customerName,
     customerPhone,
     userName: firstValue(row.userName, customerName),
-    userMobile: firstValue(row.userMobile, customerPhone),
+    userMobile: firstValue(customerPhone, row.userMobile),
     fullName: firstValue(row.fullName, row.name, customerName),
     mobileNumber: firstValue(row.mobileNumber, row.phone, customerPhone),
     partnerName,
