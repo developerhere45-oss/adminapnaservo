@@ -21,6 +21,18 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type PlatformUpdate = {
+    enabled: boolean;
+    type: "soft" | "force";
+    latestVersion: string;
+    latestBuild: number;
+    minimumVersion: string;
+    minimumBuild: number;
+    title: string;
+    message: string;
+    buttonText: string;
+    storeUrl: string;
+};
 type ControlConfig = {
   appStatus: {
     mode: string;
@@ -35,16 +47,7 @@ type ControlConfig = {
     ctaText: string;
     imageUrl: string;
   };
-  update: {
-    enabled: boolean;
-    type: "soft" | "force";
-    latestVersion: string;
-    minimumVersion: string;
-    title: string;
-    message: string;
-    buttonText: string;
-    storeUrl: string;
-  };
+  update: PlatformUpdate & { platforms?: { android: PlatformUpdate; ios: PlatformUpdate } };
   ui: { homeTitle: string; homeSubtitle: string; primaryColor: string; hiddenSections: string[] };
   features: Record<
     string,
@@ -114,7 +117,9 @@ const defaults: ControlConfig = {
     enabled: false,
     type: "soft",
     latestVersion: "",
+    latestBuild: 0,
     minimumVersion: "",
+    minimumBuild: 0,
     title: "",
     message: "",
     buttonText: "Update now",
@@ -552,6 +557,7 @@ export function AppControlCenter() {
       {tab === "updates" && (
         <UpdateControls
           config={config}
+          app={selectedApp}
           onChange={(update) => setSection("update", update)}
         />
       )}
@@ -1049,11 +1055,23 @@ function FeatureControls({
 function UpdateControls({
   config,
   onChange,
+  app,
 }: {
   config: ControlConfig;
   onChange: (value: ControlConfig["update"]) => void;
+  app: "customer" | "partner";
 }) {
-  const update = config.update;
+  const [platform, setPlatform] = useState<"android" | "ios">("android");
+  const emptyPlatform: PlatformUpdate = { enabled: false, type: "soft", latestVersion: "", latestBuild: 0, minimumVersion: "", minimumBuild: 0, title: "", message: "", buttonText: "Update Now", storeUrl: "" };
+  const update = config.update.platforms?.[platform] || (platform === "android" ? config.update : emptyPlatform);
+  const savePlatform = (value: PlatformUpdate) => onChange({
+    ...config.update,
+    platforms: {
+      android: config.update.platforms?.android || config.update,
+      ios: config.update.platforms?.ios || emptyPlatform,
+      [platform]: value,
+    },
+  });
   const selectedType = update.type === "force" ? "force" : "soft";
   const [targetVersion, setTargetVersion] = useState(update.latestVersion);
   const [targetDirty, setTargetDirty] = useState(false);
@@ -1066,7 +1084,7 @@ function UpdateControls({
     const latestVersion = normaliseVersion(targetVersion);
     const valid = isVersion(latestVersion);
     setTargetDirty(false);
-    onChange({
+    savePlatform({
       ...update,
       enabled: valid,
       latestVersion,
@@ -1074,7 +1092,7 @@ function UpdateControls({
     });
   };
   const choose = (type: "soft" | "force") =>
-    onChange({
+    savePlatform({
       ...update,
       enabled: isVersion(targetVersion),
       type,
@@ -1085,8 +1103,11 @@ function UpdateControls({
     <section className="space-y-6">
       <header>
         <h2 className="text-2xl font-black">Update Management</h2>
-        <p className="mt-1 text-sm text-[#667085]">Choose how customers should receive the latest ApnaServo version.</p>
+        <p className="mt-1 text-sm text-[#667085]">Independent published releases for the {app === "partner" ? "Partner" : "User"} App.</p>
       </header>
+      <div className="inline-flex rounded-lg border border-[#e6eaf2] bg-white p-1 text-sm font-black">
+        {(["android", "ios"] as const).map((item) => <button key={item} type="button" onClick={() => setPlatform(item)} className={cn("rounded-md px-5 py-2 capitalize", platform === item && "bg-[#fff0f4] text-[#bd1749]")}>{item}</button>)}
+      </div>
       <div className="grid gap-6 lg:grid-cols-2">
         {[
           { type: "soft" as const, title: "Normal Update", icon: "↻", description: "Notify customers about the new version. Customers can choose to update immediately or dismiss the prompt and continue using their current version of the app." },
@@ -1122,6 +1143,13 @@ function UpdateControls({
             onKeyDown={(event) => { if (event.key === "Enter") { event.currentTarget.blur(); } }}
           />
         </label>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="text-xs font-bold text-[#667085]">Minimum supported version<input className="mt-1 h-11 w-full rounded-lg border border-[#e6eaf2] px-3" value={update.minimumVersion} placeholder="1.0.19" onChange={(event) => savePlatform({ ...update, minimumVersion: normaliseVersion(event.target.value) })} /></label>
+          <label className="text-xs font-bold text-[#667085]">Latest build number<input type="number" min="0" className="mt-1 h-11 w-full rounded-lg border border-[#e6eaf2] px-3" value={update.latestBuild || 0} onChange={(event) => savePlatform({ ...update, latestBuild: Math.max(0, Number(event.target.value)) })} /></label>
+          <label className="text-xs font-bold text-[#667085]">Minimum build number<input type="number" min="0" className="mt-1 h-11 w-full rounded-lg border border-[#e6eaf2] px-3" value={update.minimumBuild || 0} onChange={(event) => savePlatform({ ...update, minimumBuild: Math.max(0, Number(event.target.value)) })} /></label>
+          <label className="text-xs font-bold text-[#667085]">Official store URL<input className="mt-1 h-11 w-full rounded-lg border border-[#e6eaf2] px-3" value={update.storeUrl} placeholder={platform === "android" ? "https://play.google.com/store/apps/details?id=…" : "https://apps.apple.com/app/id…"} onChange={(event) => savePlatform({ ...update, storeUrl: event.target.value })} /></label>
+        </div>
+        <label className="mt-4 block text-xs font-bold text-[#667085]">Release notes<textarea className="mt-1 min-h-28 w-full rounded-lg border border-[#e6eaf2] p-3" value={update.message} placeholder="What’s new…" onChange={(event) => savePlatform({ ...update, message: event.target.value })} /></label>
         {selectedType === "force" && isVersion(targetVersion) && <p className="mt-3 rounded-lg bg-[#fff7f8] px-3 py-2 text-xs font-bold text-[#9f1239]">Mandatory update will block every app version below <b>{normaliseVersion(targetVersion)}</b>.</p>}
         {!isVersion(targetVersion) && <p className="mt-3 text-xs font-semibold text-[#bd1749]">Use numeric semantic format, for example <b>1.0.16</b>. Update delivery remains off until a valid target is saved.</p>}
       </div>
