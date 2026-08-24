@@ -22,6 +22,7 @@ import {
   MapPin,
   MessageSquare,
   MoreVertical,
+  Plus,
   RefreshCw,
   RotateCcw,
   Search,
@@ -375,7 +376,7 @@ function columnsFor(resource: string, rows: ResourceRow[]) {
   return Object.keys(first).filter((key) => key !== "id").slice(0, 10);
 }
 
-function PageHeader({ resource, isFetching, onRefresh, onExport }: { resource: string; isFetching: boolean; onRefresh: () => void; onExport: () => void }) {
+function PageHeader({ resource, isFetching, onRefresh, onExport, onAdd }: { resource: string; isFetching: boolean; onRefresh: () => void; onExport: () => void; onAdd?: () => void }) {
   const config = resourceConfig[resource] || resourceConfig.bookings;
   return (
     <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -384,6 +385,7 @@ function PageHeader({ resource, isFetching, onRefresh, onExport }: { resource: s
         <p className="mt-1 text-sm font-medium text-[#667085]">{config.subtitle} - live backend data only</p>
       </div>
       <div className="flex flex-wrap gap-3">
+        {onAdd && <button onClick={onAdd} className="flex h-11 items-center gap-2 rounded-lg bg-[#f32368] px-4 text-sm font-black text-white"><Plus size={17} />Add Partner</button>}
         <button onClick={onRefresh} className="flex h-11 items-center gap-2 rounded-lg border border-[#e6eaf2] bg-white px-4 text-sm font-bold">
           <RefreshCw size={17} className={cn(isFetching && "animate-spin")} />
           Refresh
@@ -1329,11 +1331,50 @@ function LogoutPage() {
   );
 }
 
+const PARTNER_SERVICES = ["ac", "plumbing", "electrician", "carpenter", "painting", "cleaning", "laundry", "interior", "roadside", "appliances", "pest", "ro"];
+function AddPartnerDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [form, setForm] = useState({ name: "", email: "", phone: "", partnerType: "SERVICE_PARTNER", serviceCategories: ["ac"], city: "Guwahati", state: "Assam", serviceArea: "Guwahati", residentialAddress: "", status: "ACTIVE", shopName: "" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const set = (key: string, value: unknown) => setForm((current) => ({ ...current, [key]: value }));
+  const submit = async () => {
+    setSaving(true); setError("");
+    try {
+      const response = await fetch("/api/admin/partners", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || "Partner creation failed");
+      onCreated();
+    } catch (submitError) { setError(submitError instanceof Error ? submitError.message : "Partner creation failed"); }
+    finally { setSaving(false); }
+  };
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" role="dialog" aria-modal="true">
+    <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+      <div className="flex items-start justify-between"><div><h2 className="text-2xl font-black">Add Partner</h2><p className="mt-1 text-sm text-[#667085]">Create or link an existing Firebase email/phone identity.</p></div><button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg border"><XCircle size={18} /></button></div>
+      {error && <p className="mt-4 rounded-lg bg-[#fff1f3] p-3 text-sm font-bold text-[#c51d58]">{error}</p>}
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <label className="text-xs font-bold text-[#667085]">Full Name *<input className="mt-1 h-11 w-full rounded-lg border px-3" value={form.name} onChange={(e) => set("name", e.target.value)} /></label>
+        <label className="text-xs font-bold text-[#667085]">Partner Type<select className="mt-1 h-11 w-full rounded-lg border px-3" value={form.partnerType} onChange={(e) => { const value=e.target.value; set("partnerType", value); if(value !== "SERVICE_PARTNER") set("serviceCategories", ["laundry"]); }}><option value="SERVICE_PARTNER">Service Partner</option><option value="LAUNDRY_OWNER">Laundry Owner</option><option value="LAUNDRY_PARTNER">Laundry Partner</option></select></label>
+        <label className="text-xs font-bold text-[#667085]">Email<input type="email" className="mt-1 h-11 w-full rounded-lg border px-3" value={form.email} onChange={(e) => set("email", e.target.value)} /></label>
+        <label className="text-xs font-bold text-[#667085]">Phone Number<input inputMode="numeric" className="mt-1 h-11 w-full rounded-lg border px-3" value={form.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(-10))} /></label>
+        <label className="text-xs font-bold text-[#667085]">City<input className="mt-1 h-11 w-full rounded-lg border px-3" value={form.city} onChange={(e) => set("city", e.target.value)} /></label>
+        <label className="text-xs font-bold text-[#667085]">State<input className="mt-1 h-11 w-full rounded-lg border px-3" value={form.state} onChange={(e) => set("state", e.target.value)} /></label>
+        <label className="text-xs font-bold text-[#667085]">Service Area<input className="mt-1 h-11 w-full rounded-lg border px-3" value={form.serviceArea} onChange={(e) => set("serviceArea", e.target.value)} /></label>
+        <label className="text-xs font-bold text-[#667085]">Status<select className="mt-1 h-11 w-full rounded-lg border px-3" value={form.status} onChange={(e) => set("status", e.target.value)}><option>ACTIVE</option><option>INACTIVE</option><option>SUSPENDED</option></select></label>
+        <label className="text-xs font-bold text-[#667085] md:col-span-2">Address<textarea className="mt-1 min-h-20 w-full rounded-lg border p-3" value={form.residentialAddress} onChange={(e) => set("residentialAddress", e.target.value)} /></label>
+      </div>
+      <div className="mt-4"><p className="text-xs font-bold text-[#667085]">Services</p><div className="mt-2 flex flex-wrap gap-2">{PARTNER_SERVICES.map((service) => { const checked=form.serviceCategories.includes(service); const disabled=form.partnerType !== "SERVICE_PARTNER" && service !== "laundry"; return <label key={service} className={cn("rounded-lg border px-3 py-2 text-xs font-bold capitalize", checked && "border-[#f32368] bg-[#fff0f4] text-[#bd1749]", disabled && "opacity-40")}><input type="checkbox" className="mr-2" disabled={disabled} checked={checked} onChange={(e) => set("serviceCategories", e.target.checked ? [...new Set([...form.serviceCategories, service])] : form.serviceCategories.filter((item) => item !== service))} />{service}</label>; })}</div></div>
+      <p className="mt-4 text-xs text-[#667085]">Enter at least one registered identity. Existing Firebase customer identities are safely upgraded by linking the same UID; duplicate partner profiles are rejected.</p>
+      <div className="mt-6 flex justify-end gap-3"><button onClick={onClose} className="h-11 rounded-lg border px-5 text-sm font-bold">Cancel</button><button disabled={saving || !form.name.trim() || (!form.email.trim() && form.phone.length !== 10) || !form.serviceCategories.length} onClick={submit} className="h-11 rounded-lg bg-[#f32368] px-5 text-sm font-black text-white disabled:opacity-50">{saving ? "Creating…" : "Create Partner"}</button></div>
+    </div>
+  </div>;
+}
+
 export function ModulePage({ resource }: { resource: string }) {
   const [selected, setSelected] = useState<ResourceRow | null>(null);
   const [metricFilter, setMetricFilter] = useState(resource === "partners" ? "totalPartners" : "");
   const [actionMessage, setActionMessage] = useState("");
   const [pendingAction, setPendingAction] = useState("");
+  const [showAddPartner, setShowAddPartner] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data, isFetching, isError, refetch } = useQuery({
@@ -1399,7 +1440,8 @@ export function ModulePage({ resource }: { resource: string }) {
 
   return (
     <div>
-      <PageHeader resource={resource} isFetching={isFetching} onRefresh={() => refetch()} onExport={() => exportRows(resource, rows)} />
+      <PageHeader resource={resource} isFetching={isFetching} onRefresh={() => refetch()} onExport={() => exportRows(resource, rows)} onAdd={resource === "partners" ? () => setShowAddPartner(true) : undefined} />
+      {showAddPartner && <AddPartnerDialog onClose={() => setShowAddPartner(false)} onCreated={() => { setShowAddPartner(false); queryClient.invalidateQueries({ queryKey: ["admin-resource", "partners"] }); }} />}
       {isError && <div className="admin-card mb-5 border-[#ffd3dc] bg-[#fff7f9] p-4 text-sm font-bold text-[#d92d4b]">Live backend unavailable. No default records are being shown.</div>}
       {actionMessage && (
         <div className={cn("admin-card mb-5 p-4 text-sm font-bold", actionMessage.includes("failed") || actionMessage.includes("unavailable") ? "border-[#ffd3dc] bg-[#fff7f9] text-[#d92d4b]" : "border-[#c7f0d8] bg-[#f3fff7] text-[#079455]")}>
