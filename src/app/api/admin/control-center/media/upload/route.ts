@@ -8,7 +8,8 @@ export async function POST(request: Request) {
   if (!requirePermission(session, "bookings:manage")) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   try {
     const form = await request.formData();
-    const response = await fetch(`${backendUrl.replace(/\/$/, "")}/api/admin/control-center/media/upload?app=customer`, {
+    const platform = new URL(request.url).searchParams.get("platform") === "ios" ? "ios" : "android";
+    const response = await fetch(`${backendUrl.replace(/\/$/, "")}/api/admin/control-center/media/upload?app=customer&platform=${platform}`, {
       method: "POST",
       headers: { "X-Admin-Secret": adminBackendSecret, "X-Admin-Actor": session.email || "admin" },
       body: form,

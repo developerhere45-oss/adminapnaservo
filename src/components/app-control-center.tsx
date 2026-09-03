@@ -224,6 +224,7 @@ function Toggle({
 
 export function AppControlCenter() {
   const [selectedApp, setSelectedApp] = useState<"customer" | "partner">("customer");
+  const [selectedPlatform, setSelectedPlatform] = useState<"android" | "ios">("android");
   const [queryLoaded, setQueryLoaded] = useState(false);
   const [tab, setTab] = useState<
     | "status"
@@ -242,28 +243,35 @@ export function AppControlCenter() {
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const activeDraftApp = useRef<"customer" | "partner">("customer");
+  const activeDraftPlatform = useRef<"android" | "ios">("android");
   const draftRevision = useRef(0);
   const draftSnapshot = useRef<ControlConfig>(defaults);
   // Persist each draft patch in order. Without this, two quick select changes
   // can finish out of order and make the UI (or a publish) use an old value.
   const draftSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
-  const controlPath = (path: string) => `${path}${path.includes("?") ? "&" : "?"}app=${selectedApp}`;
+  const controlPath = (path: string) => `${path}${path.includes("?") ? "&" : "?"}app=${selectedApp}&platform=${selectedPlatform}`;
   useEffect(() => {
     if (!queryLoaded) {
       const requested = new URLSearchParams(window.location.search).get("app");
+      const requestedPlatform = new URLSearchParams(window.location.search).get("platform");
       setQueryLoaded(true);
       if (requested === "partner") setSelectedApp("partner");
+      if (requested !== "partner" && requestedPlatform === "ios") {
+        activeDraftPlatform.current = "ios";
+        setSelectedPlatform("ios");
+      }
       return;
     }
     const url = new URL(window.location.href);
     url.searchParams.set("app", selectedApp);
+    url.searchParams.set("platform", selectedPlatform);
     window.history.replaceState({}, "", url);
     setEditing(null);
     setSearch("");
     if (selectedApp === "partner" && ["launch", "services", "media"].includes(tab)) setTab("status");
-  }, [selectedApp, tab, queryLoaded]);
+  }, [selectedApp, selectedPlatform, tab, queryLoaded]);
   const overview = useQuery({
-    queryKey: ["app-control-overview", selectedApp],
+    queryKey: ["app-control-overview", selectedApp, selectedPlatform],
     queryFn: () =>
       api<{
         draft: ControlConfig;
@@ -283,7 +291,7 @@ export function AppControlCenter() {
     }
   }, [overview.data?.draft]);
   const items = useQuery({
-    queryKey: ["app-control-items", selectedApp, tab, search],
+    queryKey: ["app-control-items", selectedApp, selectedPlatform, tab, search],
     queryFn: () =>
       api<{ items: Item[] }>(
         controlPath(`/announcement?search=${encodeURIComponent(search)}`),
@@ -291,7 +299,7 @@ export function AppControlCenter() {
     enabled: tab === "announcements",
   });
   const audit = useQuery({
-    queryKey: ["app-control-audit", selectedApp],
+    queryKey: ["app-control-audit", selectedApp, selectedPlatform],
     queryFn: () =>
       api<{
         logs: Array<{
@@ -305,17 +313,17 @@ export function AppControlCenter() {
     enabled: tab === "audit",
   });
   const save = useMutation({
-    mutationFn: ({ section, value, app }: { section: string; value: unknown; app: "customer" | "partner"; revision: number }) =>
-      api<{ draft: ControlConfig }>(`/draft?app=${app}`, {
+    mutationFn: ({ section, value, app, platform }: { section: string; value: unknown; app: "customer" | "partner"; platform: "android" | "ios"; revision: number }) =>
+      api<{ draft: ControlConfig }>(`/draft?app=${app}&platform=${platform}`, {
         method: "PATCH",
         body: JSON.stringify({ section, value }),
       }),
     onSuccess: (result, request) => {
       setMessage("Draft saved. Publish when ready.");
-      if (request.app === activeDraftApp.current && request.revision === draftRevision.current) {
+      if (request.app === activeDraftApp.current && request.platform === activeDraftPlatform.current && request.revision === draftRevision.current) {
         draftSnapshot.current = result.draft;
         setDraft(result.draft);
-        queryClient.setQueryData(["app-control-overview", request.app], (previous: typeof overview.data) =>
+        queryClient.setQueryData(["app-control-overview", request.app, request.platform], (previous: typeof overview.data) =>
           previous ? { ...previous, draft: result.draft } : previous,
         );
       }
@@ -328,9 +336,9 @@ export function AppControlCenter() {
       return api<{ ok: boolean }>(controlPath("/publish"), { method: "POST" });
     },
     onSuccess: () => {
-      setMessage(`Published to ${selectedApp} configuration.`);
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
-      queryClient.invalidateQueries({ queryKey: ["app-control-audit", selectedApp] });
+      setMessage(`Published to ${selectedPlatform === "ios" ? "iOS" : "Android"} ${selectedApp} configuration.`);
+      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp, selectedPlatform] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-audit", selectedApp, selectedPlatform] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
@@ -346,8 +354,8 @@ export function AppControlCenter() {
     onSuccess: () => {
       setEditing(null);
       setMessage("Content saved.");
-      queryClient.invalidateQueries({ queryKey: ["app-control-items", selectedApp] });
-      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-items", selectedApp, selectedPlatform] });
+      queryClient.invalidateQueries({ queryKey: ["app-control-overview", selectedApp, selectedPlatform] });
     },
     onError: (error: Error) => setMessage(error.message),
   });
@@ -361,9 +369,10 @@ export function AppControlCenter() {
     draftSnapshot.current = next;
     setDraft(next);
     const app = selectedApp;
+    const platform = selectedPlatform;
     draftSaveQueue.current = draftSaveQueue.current
       .catch(() => undefined)
-      .then(() => save.mutateAsync({ section, value, app, revision }));
+      .then(() => save.mutateAsync({ section, value, app, platform, revision }));
   };
   const displayedItems = useMemo(() => items.data?.items || [], [items.data]);
   const tabs: Array<typeof tab> = selectedApp === "partner"
@@ -376,14 +385,18 @@ export function AppControlCenter() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold text-[#f32368]">App Control Center</p>
-          <h1 className="mt-1 text-3xl font-black">{selectedApp === "partner" ? "Partner App Controls" : "Customer App Controls"}</h1>
+          <h1 className="mt-1 text-3xl font-black">{selectedApp === "partner" ? "Partner App Controls" : selectedPlatform === "ios" ? "iOS Customer App Controls" : "Android Customer App Controls"}</h1>
           <p className="mt-1 text-sm text-[#667085]">
-            Draft → preview → publish. {selectedApp === "partner" ? "Partner" : "Customer"} devices use the last valid published configuration offline.
+            Draft → preview → publish. {selectedApp === "partner" ? "Partner" : selectedPlatform === "ios" ? "iOS customer" : "Android customer"} devices use an independent published configuration.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex rounded-lg border border-[#e6eaf2] bg-white p-1 text-sm font-bold">
-            {(["customer", "partner"] as const).map((app) => <button key={app} onClick={() => { activeDraftApp.current = app; draftRevision.current = 0; draftSnapshot.current = defaults; setDraft(defaults); setSelectedApp(app); }} className={cn("rounded-md px-3 py-2 capitalize", selectedApp === app && "bg-[#fff0f4] text-[#bd1749]")}>{app} app</button>)}
+            {([
+              { app: "customer", platform: "android", label: "Android Customer" },
+              { app: "customer", platform: "ios", label: "iOS Customer" },
+              { app: "partner", platform: "android", label: "Partner App" },
+            ] as const).map((target) => <button key={`${target.app}-${target.platform}`} onClick={() => { activeDraftApp.current = target.app; activeDraftPlatform.current = target.platform; draftRevision.current = 0; draftSnapshot.current = defaults; setDraft(defaults); setSelectedPlatform(target.platform); setSelectedApp(target.app); }} className={cn("rounded-md px-3 py-2", selectedApp === target.app && selectedPlatform === target.platform && "bg-[#fff0f4] text-[#bd1749]")}>{target.label}</button>)}
           </div>
           <button
             onClick={() => overview.refetch()}
@@ -576,6 +589,7 @@ export function AppControlCenter() {
       {tab === "media" && (
         <MediaManager
           config={config}
+          platform={selectedPlatform}
           services={overview.data?.services?.length ? overview.data.services : CUSTOMER_SERVICE_CATALOG}
           onChange={(media) => setSection("media", media)}
         />
@@ -1189,10 +1203,12 @@ const HERO_SLIDE_FALLBACKS: Record<string, string> = {
 
 function MediaManager({
   config,
+  platform,
   services,
   onChange,
 }: {
   config: ControlConfig;
+  platform: "android" | "ios";
   services: ServiceSummary[];
   onChange: (value: ControlConfig["media"]) => void;
 }) {
@@ -1210,7 +1226,7 @@ function MediaManager({
     try {
       const form = new FormData();
       form.append("image", file);
-      const response = await fetch("/api/admin/control-center/media/upload", { method: "POST", body: form });
+      const response = await fetch(`/api/admin/control-center/media/upload?platform=${platform}`, { method: "POST", body: form });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.imageUrl) throw new Error(payload.message || "Image upload failed");
       if (target === "hero") onChange({ ...media, hero: { ...media.hero, imageUrl: payload.imageUrl } });
