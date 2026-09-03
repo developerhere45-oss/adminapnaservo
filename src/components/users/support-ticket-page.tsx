@@ -225,14 +225,17 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!response.ok) throw new Error("save_failed");
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({})) as { message?: string };
+        throw new Error(errorBody.message || "Action failed on live backend.");
+      }
       if (payload.internalNote) setInternalNote("");
       if (payload.adminReply) setAdminReply("");
       setFeedback(payload.adminReply ? "Reply sent to the user." : "Saved on live backend.");
       await queryClient.invalidateQueries({ queryKey: ["support-ticket", ticketId] });
       await queryClient.invalidateQueries({ queryKey: ["users-control-center"] });
-    } catch {
-      setFeedback("Action failed. Live backend unavailable.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Action failed. Live backend unavailable.");
     } finally {
       setIsSaving(false);
     }
@@ -366,7 +369,7 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
                 <span className="text-xs font-black text-[#475467]">Assign Ticket To</span>
                 <div className="mt-2 flex gap-2">
                   <select value={currentAssignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="h-11 min-w-0 flex-1 rounded-lg border border-[#d9e1ee] bg-white px-3 text-sm font-bold outline-none focus:border-[#0b6df6]">
-                    <option value="">Select team member or partner</option>
+                    <option value="">Select support agent</option>
                     <option value="admin-dashboard@apnaservo.internal">Admin Support</option>
                     <option value="senior_support">Senior Support</option>
                     <option value="field_operations">Field Operations</option>
@@ -442,7 +445,7 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
 
           <Card title="Quick Actions" icon={Bell}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <button onClick={() => runAction({ adminReply: adminReply || "Support team is reviewing your issue and will update you shortly." })} className="flex h-11 items-center justify-center gap-2 rounded-lg border border-[#e6eaf2] bg-white text-sm font-black text-[#344054]">
+              <button disabled={!ticket.assignedTo} onClick={() => runAction({ adminReply: adminReply || "Support team is reviewing your issue and will update you shortly." })} className="flex h-11 items-center justify-center gap-2 rounded-lg border border-[#e6eaf2] bg-white text-sm font-black text-[#344054] disabled:cursor-not-allowed disabled:opacity-50">
                 <MessageCircle size={16} className="text-[#0b6df6]" />
                 Send Message
               </button>
@@ -461,10 +464,10 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
             </div>
 
             <div className="mt-4">
-              <textarea value={adminReply} onChange={(event) => setAdminReply(event.target.value)} className="min-h-24 w-full rounded-lg border border-[#d9e1ee] bg-white p-3 text-sm outline-none focus:border-[#0b6df6]" placeholder="Write admin reply..." />
-              <button disabled={isSaving || !adminReply.trim()} onClick={() => runAction({ adminReply: adminReply.trim() })} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0b6df6] text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
+              <textarea value={adminReply} onChange={(event) => setAdminReply(event.target.value)} className="min-h-24 w-full rounded-lg border border-[#d9e1ee] bg-white p-3 text-sm outline-none focus:border-[#0b6df6]" placeholder={ticket.assignedTo ? `Reply as ${ticket.assignedTo}...` : "Assign a support agent before replying..."} />
+              <button disabled={isSaving || !adminReply.trim() || !ticket.assignedTo} onClick={() => runAction({ adminReply: adminReply.trim() })} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0b6df6] text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <Send size={15} />
-                {isSaving ? "Sending..." : "Reply to User"}
+                {isSaving ? "Sending..." : ticket.assignedTo ? `Reply as ${ticket.assignedTo}` : "Assign Agent First"}
               </button>
             </div>
           </Card>
