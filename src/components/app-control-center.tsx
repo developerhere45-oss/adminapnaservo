@@ -153,6 +153,7 @@ const serviceStates = [
 // keeps operations usable while a backend catalog migration is still empty or
 // a server instance is in the middle of a rollout.
 const CUSTOMER_SERVICE_CATALOG: ServiceSummary[] = [
+  ["commercial", "Commercial Services", "Independently control all office, shop, hotel and warehouse service enquiries in the iOS customer app."],
   ["ac", "AC Repair & Service", "AC inspection, cleaning, gas refilling, performance check, and repair replacement."],
   ["electrician", "Electrician", "Switchboard, wiring, fan, MCB, socket, inverter, and urgent electrical repair."],
   ["plumbing", "Plumber", "Tap, sink, flush tank, blocked drain, water motor, leakage, and pipe repair."],
