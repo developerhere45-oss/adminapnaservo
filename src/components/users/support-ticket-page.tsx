@@ -198,6 +198,8 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
   const { data = { ticket: null }, isFetching } = useQuery({
     queryKey: ["support-ticket", ticketId],
     queryFn: () => fetchTicket(ticketId),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
   const ticket = data.ticket;
   const [assignedTo, setAssignedTo] = useState("");
@@ -207,22 +209,33 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
   const [adminReply, setAdminReply] = useState("");
   const [escalatedTo, setEscalatedTo] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   async function runAction(payload: Record<string, string>) {
-    const response = await fetch(`/api/admin/support-tickets/${encodeURIComponent(ticketId)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      setFeedback("Action failed. Live backend unavailable.");
+    if (isSaving) return;
+    if (Object.prototype.hasOwnProperty.call(payload, "adminReply") && !payload.adminReply.trim()) {
+      setFeedback("Reply message cannot be empty.");
       return;
     }
-    if (payload.internalNote) setInternalNote("");
-    if (payload.adminReply) setAdminReply("");
-    setFeedback("Saved on live backend.");
-    await queryClient.invalidateQueries({ queryKey: ["support-ticket", ticketId] });
-    await queryClient.invalidateQueries({ queryKey: ["users-control-center"] });
+    setIsSaving(true);
+    setFeedback("");
+    try {
+      const response = await fetch(`/api/admin/support-tickets/${encodeURIComponent(ticketId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error("save_failed");
+      if (payload.internalNote) setInternalNote("");
+      if (payload.adminReply) setAdminReply("");
+      setFeedback(payload.adminReply ? "Reply sent to the user." : "Saved on live backend.");
+      await queryClient.invalidateQueries({ queryKey: ["support-ticket", ticketId] });
+      await queryClient.invalidateQueries({ queryKey: ["users-control-center"] });
+    } catch {
+      setFeedback("Action failed. Live backend unavailable.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   const allMessages = useMemo(() => {
@@ -449,9 +462,9 @@ export function SupportTicketPage({ ticketId }: { ticketId: string }) {
 
             <div className="mt-4">
               <textarea value={adminReply} onChange={(event) => setAdminReply(event.target.value)} className="min-h-24 w-full rounded-lg border border-[#d9e1ee] bg-white p-3 text-sm outline-none focus:border-[#0b6df6]" placeholder="Write admin reply..." />
-              <button onClick={() => runAction({ adminReply })} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0b6df6] text-sm font-black text-white">
+              <button disabled={isSaving || !adminReply.trim()} onClick={() => runAction({ adminReply: adminReply.trim() })} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#0b6df6] text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <Send size={15} />
-                Reply to User
+                {isSaving ? "Sending..." : "Reply to User"}
               </button>
             </div>
           </Card>
