@@ -15,6 +15,11 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn, formatCurrency, statusTone } from "@/lib/utils";
+import {
+  PartnerRequestActivity,
+  type PartnerRequest,
+  type PartnerRequestSummary,
+} from "@/components/bookings/partner-request-activity";
 
 type TimelineEvent = { event: string; at: string; by: string; note: string };
 type BookingDetails = {
@@ -33,7 +38,27 @@ type BookingDetails = {
   customerNotes: string;
   finalServiceCost: number;
   paymentStatus: string;
+  partnerRequests?: PartnerRequest[];
+  partnerRequestSummary?: PartnerRequestSummary;
   timeline: TimelineEvent[];
+};
+
+const emptyPartnerRequestSummary: PartnerRequestSummary = {
+  total: 0,
+  eligiblePartners: 0,
+  requestsSent: 0,
+  delivered: 0,
+  viewed: 0,
+  accepted: 0,
+  rejected: 0,
+  expired: 0,
+  cancelled: 0,
+  failed: 0,
+  notResponded: 0,
+  assignedPartnerId: "",
+  assignedPartnerName: "",
+  assignedAt: null,
+  assignmentMethod: "Not assigned",
 };
 
 function formatDateTime(value: string) {
@@ -63,10 +88,10 @@ async function fetchBooking(bookingId: string): Promise<{ booking: BookingDetail
 }
 
 export function BookingTimelinePage({ bookingId }: { bookingId: string }) {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ["booking-timeline", bookingId],
     queryFn: () => fetchBooking(bookingId),
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
   const booking = data?.booking;
 
@@ -107,6 +132,13 @@ export function BookingTimelinePage({ bookingId }: { bookingId: string }) {
           </div>
         ))}
       </section>
+
+      <PartnerRequestActivity
+        bookingId={booking.bookingId}
+        requests={booking.partnerRequests || []}
+        summary={booking.partnerRequestSummary || emptyPartnerRequestSummary}
+        isRefreshing={isFetching}
+      />
 
       <section className="admin-card p-5">
         <h2 className="text-lg font-black text-[#111827]">Booking Timeline</h2>
