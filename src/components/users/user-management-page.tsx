@@ -56,6 +56,9 @@ type SupportTicketRow = {
   status: string;
   createdDateTime: string;
   lastUpdated: string;
+  lastMessage: string;
+  lastMessageAt: string;
+  unreadCount: number;
   complaint: string;
 };
 
@@ -381,8 +384,8 @@ export function UserManagementPage({ initialTab = "users" }: { initialTab?: "use
                   {tickets.length === 0 && <tr><td colSpan={9} className="px-5 py-12 text-center font-semibold text-[#667085]">No support tickets match the current filters.</td></tr>}
                   {tickets.map((ticket) => (
                     <tr key={ticket.id} className="border-t border-[#edf0f6] hover:bg-[#f8fbff]">
-                      <td className="px-5 py-4"><Link className="font-black text-[#0b6df6]" href={`/users/support/${ticket.id}`}>{ticket.ticketId}</Link></td>
-                      <td className="px-5 py-4 font-black">{ticket.userName || "Unknown user"}</td>
+                      <td className="px-5 py-4"><Link className="font-black text-[#0b6df6]" href={`/users/support/${ticket.id}`}>{ticket.ticketId}</Link>{ticket.unreadCount > 0 ? <span className="ml-2 rounded-full bg-[#d92d4b] px-2 py-0.5 text-[10px] font-black text-white">{ticket.unreadCount} new</span> : null}</td>
+                      <td className="px-5 py-4"><div className="font-black">{ticket.userName || "Unknown user"}</div><div className="mt-1 max-w-56 truncate text-xs font-semibold text-[#667085]">{ticket.lastMessage || "No message"}</div></td>
                       <td className="px-5 py-4 font-semibold">{ticket.mobileNumber || "Not available"}</td>
                       <td className="px-5 py-4 capitalize">{ticket.ticketCategory}</td>
                       <td className="px-5 py-4"><Status value={ticket.priority} /></td>
