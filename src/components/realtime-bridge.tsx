@@ -46,6 +46,8 @@ function eventLabel(eventName: string) {
   const labels: Record<string, string> = {
     "user:registered": "New user registered",
     "user:updated": "User account updated",
+    "user:service_clicked": "Customer opened a service",
+    "user:screen_view": "Customer app activity",
     "booking:new_request": "New booking created",
     "booking:partner_request_sent": "Partner request sent",
     "booking:partner_request_delivered": "Partner request delivered",
@@ -97,7 +99,12 @@ function eventDetail(eventName: string, payload: Record<string, unknown>) {
   if (eventName.startsWith("support:")) return String(payload.ticketId || payload.status || "Support ticket event received");
   if (eventName.startsWith("notification:")) return String(payload.title || payload.notificationId || payload.status || "Notification event received");
   if (eventName.startsWith("complaint:")) return String(payload.bookingCode || payload.reason || "Complaint event received");
-  if (eventName.startsWith("user:")) return String(payload.name || payload.phone || payload.userId || "User event received");
+  if (eventName.startsWith("user:")) {
+    return [payload.userName || payload.name || payload.phone || payload.userId, payload.serviceName || payload.serviceCategory, payload.screen, payload.platform]
+      .filter(Boolean)
+      .map(String)
+      .join(" - ") || "User event received";
+  }
   if (eventName.startsWith("review:")) return String(payload.bookingCode || payload.partnerId || "Partner rating received");
   return "Live backend event received";
 }
@@ -105,6 +112,8 @@ function eventDetail(eventName: string, payload: Record<string, unknown>) {
 const adminEvents = [
   "user:registered",
   "user:updated",
+  "user:service_clicked",
+  "user:screen_view",
   "booking:new_request",
   "booking:partner_request_sent",
   "booking:partner_request_delivered",

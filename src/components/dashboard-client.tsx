@@ -80,6 +80,13 @@ type ActivityItem = {
   amount: number;
   actorRole: string;
   actorName: string;
+  source?: string;
+  payload?: {
+    platform?: string;
+    screen?: string;
+    serviceName?: string;
+    serviceCategory?: string;
+  };
   createdAt: string;
 };
 
@@ -388,6 +395,10 @@ function LiveWorkflowActivity({ fallback = [] }: { fallback?: ActivityItem[] }) 
               <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black capitalize", activityTone(entry.category))}>{entry.category || "live"}</span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-bold text-[#667085]">
+              {entry.actorName && <span className="rounded-full bg-[#f3eaff] px-2 py-1 text-[#7c3aed]">Customer: {entry.actorName}</span>}
+              {entry.payload?.platform && <span className="rounded-full bg-[#eef5ff] px-2 py-1 uppercase text-[#0b6df6]">{entry.payload.platform}</span>}
+              {(entry.payload?.serviceName || entry.payload?.serviceCategory) && <span className="rounded-full bg-[#fff4df] px-2 py-1 text-[#9a5b00]">{entry.payload.serviceName || entry.payload.serviceCategory}</span>}
+              {entry.payload?.screen && <span className="rounded-full bg-[#f6f8fb] px-2 py-1">Screen: {entry.payload.screen}</span>}
               {(entry.bookingCode || entry.ticketId || entry.complaintId) && <span className="rounded-full bg-[#f6f8fb] px-2 py-1">{entry.bookingCode || entry.ticketId || entry.complaintId}</span>}
               {entry.status && <span className="rounded-full bg-[#f6f8fb] px-2 py-1 capitalize">{entry.status.replace(/_/g, " ")}</span>}
               <span className="flex items-center gap-1"><Clock3 size={12} />{formatDate(entry.createdAt)}</span>
