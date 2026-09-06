@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BadgePercent, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useLiveAdmin } from "@/components/realtime-bridge";
 
 type Rule = { id: string; name: string; serviceCategory: string; audience: "all" | "new_users" | "individual"; targetUserId: string; discountType: "fixed" | "percent"; value: number; maxDiscount: number; minimumAmount: number; active: boolean; startsAt: string; endsAt: string; usage?: { users: number; bookings: number; totalDiscount: number } };
 const blank = { name: "New User Offer", serviceCategory: "all", audience: "new_users", targetUserId: "", discountType: "fixed", value: 100, maxDiscount: 0, minimumAmount: 0, active: true, startsAt: "", endsAt: "" };
 const services = ["all", "ac", "plumbing", "electrician", "carpenter", "painting", "cleaning", "laundry", "interior", "roadside", "appliances", "pest", "ro"];
 
 export function DiscountManager() {
+  const liveEventCount = useLiveAdmin(state => state.eventCount);
   const [rules, setRules] = useState<Rule[]>([]);
   const [form, setForm] = useState(blank);
   const [bookingId, setBookingId] = useState("");
@@ -16,7 +18,12 @@ export function DiscountManager() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => { const response = await fetch("/api/admin/discounts", { cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.message || "Unable to load discounts"); setRules(data.rules || []); }, []);
-  useEffect(() => { load().catch((error) => setMessage(error.message)); }, [load]);
+  useEffect(() => {
+    const refresh = () => load().catch((error) => setMessage(error.message));
+    const eventRefresh = window.setTimeout(refresh, 250);
+    const fallbackRefresh = window.setInterval(refresh, 10_000);
+    return () => { window.clearTimeout(eventRefresh); window.clearInterval(fallbackRefresh); };
+  }, [load, liveEventCount]);
   async function createRule(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
     try { const response = await fetch("/api/admin/discounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }); const data = await response.json(); if (!response.ok) throw new Error(data.message || "Unable to save"); setForm(blank); await load(); setMessage("Discount rule saved. New eligible invoices will use it automatically."); }
