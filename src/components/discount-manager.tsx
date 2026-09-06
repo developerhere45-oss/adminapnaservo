@@ -10,6 +10,9 @@ const services = ["all", "ac", "plumbing", "electrician", "carpenter", "painting
 export function DiscountManager() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [form, setForm] = useState(blank);
+  const [bookingId, setBookingId] = useState("");
+  const [bookingAmount, setBookingAmount] = useState("");
+  const [bookingReason, setBookingReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const load = useCallback(async () => { const response = await fetch("/api/admin/discounts", { cache: "no-store" }); const data = await response.json(); if (!response.ok) throw new Error(data.message || "Unable to load discounts"); setRules(data.rules || []); }, []);
@@ -21,6 +24,11 @@ export function DiscountManager() {
   }
   async function change(rule: Rule, patch: Partial<Rule>) { setBusy(true); try { const response = await fetch(`/api/admin/discounts/${rule.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...rule, ...patch }) }); if (!response.ok) throw new Error("Update failed"); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Update failed"); } finally { setBusy(false); } }
   async function remove(rule: Rule) { if (!window.confirm(`Delete ${rule.name}? Existing invoices will keep their applied discount.`)) return; setBusy(true); try { const response = await fetch(`/api/admin/discounts/${rule.id}`, { method: "DELETE" }); if (!response.ok) throw new Error("Delete failed"); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Delete failed"); } finally { setBusy(false); } }
+  async function applyBookingDiscount(event: React.FormEvent) {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try { const response = await fetch("/api/admin/discounts/booking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, amount: Number(bookingAmount), reason: bookingReason }) }); const data = await response.json(); if (!response.ok) throw new Error(data.message || "Unable to apply booking discount"); setBookingId(""); setBookingAmount(""); setBookingReason(""); setMessage(data.appliedNow ? "Booking discount applied. The pending payable amount has been updated." : "Booking discount saved. It will apply when the partner sends the quote."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Unable to apply booking discount"); } finally { setBusy(false); }
+  }
   const field = "h-11 rounded-xl border border-[#dfe5ef] bg-white px-3 text-sm font-semibold outline-none focus:border-[#0b6df6]";
   return <main className="space-y-6 p-5 md:p-8">
     <div className="flex items-center justify-between"><div><h1 className="flex items-center gap-2 text-2xl font-black text-[#111827]"><BadgePercent className="text-[#0b6df6]" /> Discounts</h1><p className="mt-1 text-sm font-semibold text-[#667085]">Server-controlled offers apply without releasing a new customer app.</p></div><button onClick={() => load().catch(e => setMessage(e.message))} className="rounded-xl border p-3"><RefreshCw size={18} /></button></div>
@@ -34,6 +42,13 @@ export function DiscountManager() {
       <input className={field} type="number" min="0" value={form.minimumAmount} onChange={e => setForm({ ...form, minimumAmount: Number(e.target.value) })} placeholder="Minimum bill ₹" />
       <input className={field} type="datetime-local" value={form.endsAt} onChange={e => setForm({ ...form, endsAt: e.target.value })} />
       <button disabled={busy} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0b6df6] font-black text-white disabled:opacity-60"><Plus size={17} /> Create Offer</button>
+    </form>
+    <form onSubmit={applyBookingDiscount} className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm md:grid-cols-4">
+      <div className="md:col-span-4"><h2 className="text-base font-black text-[#111827]">Existing booking discount</h2><p className="mt-1 text-sm font-semibold text-[#667085]">Apply any one-time ₹ discount to a booked job. Pending quotes update immediately; paid or completed jobs need a refund or credit note.</p></div>
+      <input className={field} value={bookingId} onChange={e => setBookingId(e.target.value)} placeholder="Booking ID" maxLength={100} required />
+      <input className={field} type="number" min="1" value={bookingAmount} onChange={e => setBookingAmount(e.target.value)} placeholder="Discount ₹" required />
+      <input className={field} value={bookingReason} onChange={e => setBookingReason(e.target.value)} placeholder="Reason (optional)" maxLength={300} />
+      <button disabled={busy} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-amber-600 font-black text-white disabled:opacity-60"><BadgePercent size={17} /> Apply to Booking</button>
     </form>
     {message && <p className="rounded-xl bg-[#eef5ff] p-3 text-sm font-bold text-[#1849a9]">{message}</p>}
     <div className="overflow-x-auto rounded-2xl border border-[#e6eaf0] bg-white"><table className="w-full text-left text-sm"><thead className="bg-[#f8fafc] text-[#667085]"><tr>{["Offer", "Service", "Audience", "Discount", "Minimum", "Status", ""].map(h => <th key={h} className="px-4 py-3 font-black">{h}</th>)}</tr></thead><tbody>{rules.map(rule => <tr key={rule.id} className="border-t"><td className="px-4 py-4 font-black">{rule.name}</td><td className="px-4 py-4">{rule.serviceCategory}</td><td className="px-4 py-4">{rule.audience === "individual" ? `User: ${rule.targetUserId}` : rule.audience === "new_users" ? "New users" : "All users"}</td><td className="px-4 py-4 font-black">{rule.discountType === "fixed" ? `₹${rule.value}` : `${rule.value}%`}</td><td className="px-4 py-4">₹{rule.minimumAmount}</td><td className="px-4 py-4"><button disabled={busy} onClick={() => change(rule, { active: !rule.active })} className={`rounded-full px-3 py-1 text-xs font-black ${rule.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{rule.active ? "Active" : "Paused"}</button></td><td className="px-4 py-4"><button onClick={() => remove(rule)} className="text-red-600" aria-label="Delete"><Trash2 size={17} /></button></td></tr>)}</tbody></table></div>
