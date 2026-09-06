@@ -19,6 +19,7 @@ const adminLegacyRoots = [
   "/partners",
   "/partner-approvals",
   "/payments",
+  "/discounts",
   "/reports",
   "/settings",
   "/logout",

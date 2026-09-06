@@ -24,6 +24,7 @@ import {
   UserCog,
   Users,
   WalletCards,
+  BadgePercent,
   X,
 } from "lucide-react";
 import { Providers } from "@/app/providers";
@@ -42,6 +43,7 @@ const navItems = [
   { href: "/partners", label: "Partners", icon: UserCheck },
   { href: "/partner-approvals", label: "Partner Approvals", icon: ShieldCheck },
   { href: "/payments", label: "Payments & Finance", icon: WalletCards },
+  { href: "/discounts", label: "Discounts", icon: BadgePercent },
   { href: "/bookings", label: "Bookings", icon: CalendarCheck },
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/app-control", label: "App Control Center", icon: ShieldCheck },
