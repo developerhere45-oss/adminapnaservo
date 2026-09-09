@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 type TargetType = "ALL_USERS" | "ALL_PARTNERS" | "SPECIFIC_USER" | "SPECIFIC_PARTNER";
 type ActionType = "NONE" | "OPEN_HOME" | "OPEN_NOTIFICATIONS" | "OPEN_SERVICE" | "OPEN_BOOKING" | "OPEN_OFFERS" | "OPEN_PARTNER_HOME" | "OPEN_PARTNER_BOOKING";
 type ScheduleMode = "now" | "later";
+type DeliveryPlatform = "both" | "android" | "ios";
 
 type Recipient = {
   id: string;
@@ -36,6 +37,7 @@ type NotificationRecord = {
   message: string;
   imageUrl: string;
   targetType: TargetType;
+  deliveryPlatform: DeliveryPlatform;
   status: string;
   sentBy: string;
   sentByEmail: string;
@@ -71,6 +73,12 @@ const targetOptions: { value: TargetType; label: string }[] = [
   { value: "ALL_PARTNERS", label: "All Partners" },
   { value: "SPECIFIC_USER", label: "Specific User" },
   { value: "SPECIFIC_PARTNER", label: "Specific Partner" },
+];
+
+const platformOptions: { value: DeliveryPlatform; label: string }[] = [
+  { value: "both", label: "Android + iOS (Both)" },
+  { value: "android", label: "Android only" },
+  { value: "ios", label: "iOS only" },
 ];
 
 const actionOptions: { value: ActionType; label: string }[] = [
@@ -157,6 +165,7 @@ function AndroidPreview({ title, message, imageUrl }: { title: string; message: 
 export function NotificationsPage() {
   const queryClient = useQueryClient();
   const [targetType, setTargetType] = useState<TargetType>("ALL_USERS");
+  const [deliveryPlatform, setDeliveryPlatform] = useState<DeliveryPlatform>("both");
   const [recipientQuery, setRecipientQuery] = useState("");
   const [recipientResults, setRecipientResults] = useState<Recipient[]>([]);
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
@@ -212,7 +221,7 @@ export function NotificationsPage() {
         return;
       }
       try {
-        const result = await jsonFetch<{ count: number }>(`/api/admin/notifications/search-recipients?targetType=${targetType}&countOnly=true`);
+        const result = await jsonFetch<{ count: number }>(`/api/admin/notifications/search-recipients?targetType=${targetType}&deliveryPlatform=${deliveryPlatform}&countOnly=true`);
         if (!cancelled) setRecipientCount(result.count);
       } catch {
         if (!cancelled) setRecipientCount(null);
@@ -220,7 +229,7 @@ export function NotificationsPage() {
     }
     loadCount();
     return () => { cancelled = true; };
-  }, [recipientQuery, specificTarget, selectedRecipient, targetType]);
+  }, [deliveryPlatform, recipientQuery, specificTarget, selectedRecipient, targetType]);
 
   useEffect(() => {
     if (!specificTarget || recipientQuery.trim().length < 2) {
@@ -242,6 +251,7 @@ export function NotificationsPage() {
 
   const payload = useMemo(() => ({
     targetType,
+    deliveryPlatform,
     recipientId: selectedRecipient?.id || "",
     recipientQuery: recipientQuery.trim(),
     title: title.trim(),
@@ -251,7 +261,7 @@ export function NotificationsPage() {
     actionId: actionNeedsId ? actionId.trim() : "",
     ...(scheduleMode === "later" && scheduleAt ? { scheduleAt: new Date(scheduleAt).toISOString() } : {}),
     idempotencyKey: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-  }), [actionId, actionNeedsId, actionType, imageUrl, message, recipientQuery, scheduleAt, scheduleMode, selectedRecipient?.id, targetType, title]);
+  }), [actionId, actionNeedsId, actionType, deliveryPlatform, imageUrl, message, recipientQuery, scheduleAt, scheduleMode, selectedRecipient?.id, targetType, title]);
 
   const sendMutation = useMutation({
     mutationFn: () => jsonFetch<{ notification: NotificationRecord }>(
@@ -346,6 +356,13 @@ export function NotificationsPage() {
               </select>
             </label>
 
+            <label className="grid gap-2 text-sm font-bold text-[#344054]">
+              Send On
+              <select value={deliveryPlatform} onChange={(event) => setDeliveryPlatform(event.target.value as DeliveryPlatform)} className="h-11 rounded-lg border border-[#e6eaf2] bg-white px-3 outline-none">
+                {platformOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+
             {specificTarget && (
               <div className="relative grid gap-2 text-sm font-bold text-[#344054]">
                 Search Recipient
@@ -434,6 +451,7 @@ export function NotificationsPage() {
           <div className="mt-5"><AndroidPreview title={title} message={message} imageUrl={imageUrl} /></div>
           <div className="mt-5 rounded-lg bg-[#f8fafc] p-4 text-sm font-semibold text-[#475467]">
             <p>Target: <span className="font-black text-[#111827]">{targetLabel(targetType)}</span></p>
+            <p className="mt-2">Platform: <span className="font-black capitalize text-[#111827]">{deliveryPlatform === "both" ? "Android + iOS" : deliveryPlatform}</span></p>
             <p className="mt-2">Action: <span className="font-black text-[#111827]">{actionType}</span></p>
             <p className="mt-2">Schedule: <span className="font-black text-[#111827]">{scheduleMode === "later" ? (scheduleAt ? formatDate(new Date(scheduleAt).toISOString()) : "Not selected") : "Send now"}</span></p>
           </div>
@@ -463,7 +481,7 @@ export function NotificationsPage() {
               ) : data.notifications.map((item) => (
                 <tr key={item.id} className="border-t border-[#edf0f6]">
                   <td className="max-w-[280px] px-5 py-3 font-bold text-[#111827]">{item.title}</td>
-                  <td className="px-5 py-3 font-semibold text-[#475467]">{targetLabel(item.targetType)}</td>
+                  <td className="px-5 py-3 font-semibold text-[#475467]">{targetLabel(item.targetType)}<span className="mt-1 block text-xs font-bold uppercase text-[#0b6df6]">{item.deliveryPlatform === "both" ? "Android + iOS" : item.deliveryPlatform}</span></td>
                   <td className="px-5 py-3 font-semibold text-[#475467]">{item.recipientCount} / {item.successCount} sent</td>
                   <td className="px-5 py-3"><span className={cn("status-pill", statusTone(item.status))}>{item.status.replace("_", " ")}</span></td>
                   <td className="px-5 py-3 font-semibold text-[#475467]">{item.sentByEmail || item.sentBy || "Admin"}</td>
@@ -515,6 +533,7 @@ export function NotificationsPage() {
               <div>
                 <h2 className="text-xl font-black text-[#111827]">{details.title}</h2>
                 <p className="mt-1 text-sm font-semibold text-[#667085]">{targetLabel(details.targetType)} - {details.status}</p>
+                <p className="mt-1 text-xs font-bold uppercase text-[#0b6df6]">{details.deliveryPlatform === "both" ? "Android + iOS" : details.deliveryPlatform}</p>
               </div>
               <button onClick={() => setDetails(null)} className="rounded-lg border border-[#e6eaf2] px-3 py-2 text-xs font-black">Close</button>
             </div>
