@@ -236,6 +236,9 @@ export function RealtimeBridge() {
             queryClient.invalidateQueries({ queryKey: ["support-ticket"] });
             queryClient.invalidateQueries({ queryKey: ["booking-timeline"] });
             queryClient.invalidateQueries({ queryKey: ["admin-activity"] });
+            if (eventName === "user:service_clicked") {
+              queryClient.invalidateQueries({ queryKey: ["service-interest"] });
+            }
             queryClient.invalidateQueries({ queryKey: ["app-control-overview"] });
             queryClient.invalidateQueries({ queryKey: ["app-control-items"] });
             queryClient.invalidateQueries({ queryKey: ["app-control-audit"] });

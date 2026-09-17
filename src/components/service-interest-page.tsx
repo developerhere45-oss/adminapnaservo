@@ -47,7 +47,7 @@ export function ServiceInterestPage() {
       if (!response.ok) throw new Error("Service interest data unavailable");
       return response.json();
     },
-    refetchInterval: visibleRefetchInterval(20_000),
+    refetchInterval: visibleRefetchInterval(10_000),
   });
   const data = query.data;
   const totalUsers = (data?.services || []).reduce((sum, row) => sum + row.uniqueUsers, 0);
