@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
+  BarChart3,
   CalendarDays,
   CalendarCheck,
   ChevronDown,
@@ -35,10 +36,12 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/users", label: "Users", icon: Users },
+  { href: "/service-interest", label: "Service Interest", icon: BarChart3 },
   { href: "/users/support", label: "Support & Complaints", icon: Ticket, child: true },
   { href: "/chats", label: "Chats", icon: MessageSquare },
   { href: "/employees", label: "Employees", icon: UserCog },
   { href: "/notifications", label: "Notifications", icon: Megaphone },
+  { href: "/offers", label: "Offers & Banners", icon: Megaphone },
   { href: "/devices", label: "Devices", icon: Smartphone },
   { href: "/partners", label: "Partners", icon: UserCheck },
   { href: "/partner-approvals", label: "Partner Approvals", icon: ShieldCheck },
