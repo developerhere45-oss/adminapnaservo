@@ -48,7 +48,7 @@ type ControlConfig = {
     imageUrl: string;
   };
   update: PlatformUpdate & { platforms?: { android: PlatformUpdate; ios: PlatformUpdate } };
-  ui: { homeTitle: string; homeSubtitle: string; primaryColor: string; hiddenSections: string[] };
+  ui: { homeTitle: string; homeSubtitle: string; primaryColor: string; hiddenSections: string[]; sectionOrder?: string[]; sectionSpacing?: number; headerNotices?: { id: string; enabled: boolean; title: string; message: string; backgroundColor: string; textColor: string; fontSize: number; padding: number }[] };
   features: Record<
     string,
     {
@@ -553,6 +553,19 @@ export function AppControlCenter() {
             <h2 className="text-xl font-black">Remote UI Manager</h2>
             <p className="mt-1 text-sm text-[#667085]">Safely change supported copy and the accent color. These fields update the real selected app after Publish; native screens and code cannot be uploaded here.</p>
             <div className="mt-5 grid gap-3">
+              {selectedApp === "customer" && <fieldset className="space-y-3 rounded-lg border p-3">
+                <legend className="font-bold">Above-header notices</legend>
+                <label className="block text-xs">Section spacing (0–32)<input className={input} type="number" min={0} max={32} value={config.ui.sectionSpacing ?? 18} onChange={e => setDraft({ ...config, ui: { ...config.ui, sectionSpacing: Number(e.target.value) } })} onBlur={() => setSection("ui", draft.ui)} /></label>
+                {(config.ui.sectionOrder ?? ["quick_services", "commercial", "popular_services", "more_services", "feature_strip"]).map((id, index, order) => <div key={id} className="flex justify-between text-sm"><span>{id.replaceAll("_", " ")}</span><button type="button" disabled={index === 0} onClick={() => { const next = [...order]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setSection("ui", { ...config.ui, sectionOrder: next }); }}>Move up</button></div>)}
+                <p className="text-xs text-[#667085]">Full-width notices push the header down. Requires a build with remote header support. Save draft, then Publish.</p>
+                {(config.ui.headerNotices ?? []).map((notice, index) => <div key={notice.id} className="grid gap-2 border-b pb-3">
+                  <label><input type="checkbox" checked={notice.enabled} onChange={e => setSection("ui", { ...config.ui, headerNotices: config.ui.headerNotices?.map((n, i) => i === index ? { ...n, enabled: e.target.checked } : n) })} /> Visible</label>
+                  {(["title", "message", "backgroundColor", "textColor", "fontSize", "padding"] as const).map(key => <label key={key} className="text-xs">{key}<input className={input} type={key.includes("Color") ? "color" : key === "fontSize" || key === "padding" ? "number" : "text"} value={notice[key]} onChange={e => setDraft({ ...config, ui: { ...config.ui, headerNotices: config.ui.headerNotices?.map((n, i) => i === index ? { ...n, [key]: key === "fontSize" || key === "padding" ? Number(e.target.value) : e.target.value } : n) } })} onBlur={() => setSection("ui", draft.ui)} /></label>)}
+                  <div style={{ backgroundColor: notice.backgroundColor, color: notice.textColor, padding: notice.padding, fontSize: notice.fontSize }}><strong>{notice.title}</strong><p>{notice.message}</p></div>
+                  <button type="button" onClick={() => setSection("ui", { ...config.ui, headerNotices: config.ui.headerNotices?.filter((_, i) => i !== index) })}>Remove notice</button>
+                </div>)}
+                <button type="button" disabled={(config.ui.headerNotices?.length ?? 0) >= 5} onClick={() => setSection("ui", { ...config.ui, headerNotices: [...(config.ui.headerNotices ?? []), { id: crypto.randomUUID(), enabled: true, title: "New notice", message: "", backgroundColor: "#fff8f9", textColor: "#7e0012", fontSize: 13, padding: 12 }] })}>Add header notice</button>
+              </fieldset>}
               <label className="text-xs font-bold text-[#667085]">Home headline<input className={cn(input, "mt-1")} value={config.ui.homeTitle} placeholder={selectedApp === "partner" ? "Welcome back" : "Trusted home services"} onChange={(e) => setDraft({ ...config, ui: { ...config.ui, homeTitle: e.target.value } })} onBlur={() => setSection("ui", draft.ui)} /></label>
               <label className="text-xs font-bold text-[#667085]">Home subtitle<input className={cn(input, "mt-1")} value={config.ui.homeSubtitle} placeholder="A short message shown in the home experience" onChange={(e) => setDraft({ ...config, ui: { ...config.ui, homeSubtitle: e.target.value } })} onBlur={() => setSection("ui", draft.ui)} /></label>
               <div className="rounded-lg border border-[#e6eaf2] p-3"><p className="text-xs font-bold text-[#667085]">Visible home sections</p><div className="mt-2 flex flex-wrap gap-2">{(selectedApp === "partner" ? ["online", "stats", "recent_requests"] : ["hero", "announcements", "quick_services", "commercial", "popular_services", "more_services", "feature_strip"]).map((section) => <label key={section} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={!config.ui.hiddenSections.includes(section)} onChange={(e) => { const hiddenSections = e.target.checked ? config.ui.hiddenSections.filter((item) => item !== section) : [...config.ui.hiddenSections, section]; setSection("ui", { ...config.ui, hiddenSections }); }} />{section.replace(/_/g, " ")}</label>)}</div></div>
